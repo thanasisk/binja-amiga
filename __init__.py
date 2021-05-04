@@ -72,7 +72,7 @@ class AmigaHunk(BinaryView):
                 print("code hunk found! 0x%X" % idx)
                 code_sz = struct.unpack(">L",self.data.read(idx,4))[0]
                 print("Length of code: %d" %code_sz )
-                self.add_auto_segment( 0x040000, code_sz * 4, idx, code_sz * 4, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
+                self.add_auto_segment( 0x040000, code_sz * 4, idx + 4, code_sz * 4, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
 
     @classmethod
     def is_valid_for_data(self, data):
