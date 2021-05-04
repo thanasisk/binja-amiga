@@ -49,29 +49,30 @@ class AmigaHunk(BinaryView):
         self.platform = Architecture['M68000'].standalone_platform
         self.data = data
         self.create_segments()
-        #self.add_auto_segment(0x10000, 1024, 0, 0, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
-        #self.add_auto_section("small code section", 0x10000, 1024, SectionSemantics.ReadOnlyCodeSectionSemantics)
 
     def create_segments(self):
+        idx = 0x00
         hunktypes = []
-        magic = self.data.read(0x00,4)
-        string = self.data.read(0x04,4)
-        numhunks = struct.unpack(">L",self.data.read(0x08,4))[0]
-        first_hunk = struct.unpack(">L",self.data.read(0x0D,4))[0]
-        last_hunk = struct.unpack(">L",self.data.read(0x12,4))[0]
+        magic = self.data.read(idx,4)
+        idx += 4
+        string = self.data.read(idx,4)
+        idx += 4
+        numhunks = struct.unpack(">L",self.data.read(idx,4))[0]
+        idx += 4
+        first_hunk = struct.unpack(">L",self.data.read(idx,4))[0]
+        idx += 4
+        last_hunk = struct.unpack(">L",self.data.read(idx,4))[0]
+        idx += 8 # skip a step
         print(len(self.data),numhunks, first_hunk, last_hunk)
-        idx = 0x1A
-        #idx = 0x16
         for i in range(numhunks):
             hunktypes.append(struct.unpack(">L",self.data.read(idx,4))[0])
             idx += 4
             print("type of %d hunk = 0x%X"% (i, hunktypes[i]))
-            if hunktypes[i] == 0x03E90000:
+            if hunktypes[i] == 0x03E9:
                 print("code hunk found! 0x%X" % idx)
                 code_sz = struct.unpack(">L",self.data.read(idx,4))[0]
-                print("Length of code: %d" % code_sz )
-                #self.add_auto_segment(0, code_sz,idx+4,code_sz,SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
-                #self.add_entry_point(idx+4)
+                print("Length of code: %d" %code_sz )
+                self.add_auto_segment( 0x040000, code_sz * 4, idx, code_sz * 4, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
 
     @classmethod
     def is_valid_for_data(self, data):
