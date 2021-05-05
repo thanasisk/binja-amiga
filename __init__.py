@@ -1,4 +1,4 @@
-
+# coding=utf-8
 """
 Copyright (c) 2021 Athanasios Kostopoulos
 
@@ -25,21 +25,13 @@ THE SOFTWARE.
 from __future__ import print_function
 
 import struct
-import traceback
-import os
+#import traceback
+#import os
 
 from binaryninja.architecture import Architecture
-from binaryninja.lowlevelil import LowLevelILLabel, LLIL_TEMP
-from binaryninja.function import RegisterInfo, InstructionInfo, InstructionTextToken
-from binaryninja.binaryview import BinaryView, BinaryReader, BinaryViewType
+from binaryninja.binaryview import BinaryView
 from binaryninja.plugin import PluginCommand
-from binaryninja.interaction import AddressField, ChoiceField, get_form_input
-from binaryninja.types import Symbol
-from binaryninja.log import log_error
-from binaryninja.enums import (Endianness, BranchType, InstructionTextTokenType,
-        LowLevelILOperation, LowLevelILFlagCondition, FlagRole, SegmentFlag,
-        ImplicitRegisterExtend, SymbolType)
-from binaryninja.enums import SectionSemantics
+from binaryninja.enums import (SectionSemantics, SegmentFlag)
 
 class AmigaHunk(BinaryView):
     name = 'Amiga500'
@@ -51,12 +43,8 @@ class AmigaHunk(BinaryView):
         self.create_segments()
 
     def create_segments(self):
-        idx = 0x00
+        idx = 0x08
         hunktypes = []
-        magic = self.data.read(idx,4)
-        idx += 4
-        string = self.data.read(idx,4)
-        idx += 4
         numhunks = struct.unpack(">L",self.data.read(idx,4))[0]
         idx += 4
         first_hunk = struct.unpack(">L",self.data.read(idx,4))[0]
@@ -64,7 +52,7 @@ class AmigaHunk(BinaryView):
         last_hunk = struct.unpack(">L",self.data.read(idx,4))[0]
         idx += 8 # skip a step
         print(len(self.data),numhunks, first_hunk, last_hunk)
-        for i in range(numhunks):
+        for i in range(0, numhunks):
             hunktypes.append(struct.unpack(">L",self.data.read(idx,4))[0])
             idx += 4
             print("type of %d hunk = 0x%X"% (i, hunktypes[i]))
@@ -72,59 +60,19 @@ class AmigaHunk(BinaryView):
                 print("code hunk found! 0x%X" % idx)
                 code_sz = struct.unpack(">L",self.data.read(idx,4))[0]
                 print("Length of code: %d" %code_sz )
+                # TODO: fix/identify base address
                 self.add_auto_segment( 0x040000, code_sz * 4, idx + 4, code_sz * 4, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
-
+                self.add_user_section("CodeHunk_"+str(i), 0x040000, code_sz * 4, SectionSemantics.ReadOnlyCodeSectionSemantics)
     @classmethod
     def is_valid_for_data(self, data):
-        header = data.read(0,4)
+        header = data.read(0,8)
+        strings = struct.unpack(">L",header[4:8])[0]
+        # strings should be 0 for loadable files
+        if strings != 0x00:
+            return False
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
 
     def perform_is_executable(self):
         return True
 
-    """
-    def read_uchar(self,f):
-        return struct.unpack("<B", f.read(1))[0]
-
-    def read_uint16(self, f):
-        return struct.unpack("<H", f.read(2))[0]
-
-    def read_uint32(self, f):
-        return struct.unpack("<I", f.read(4))[0]
-
-    def read_string(self, f):
-        num_longs = self.read_uint32(f)
-        if num_longs < 1:
-            return ""
-        s = f.read(num_longs * 4)
-        idx = s.find("\0")
-        return s[:idx]
-
-    def read_hunk_header(self, f):
-        resident_library_names = []
-        while 1:
-            s = self.read_string(f)
-            if s == "":
-                break
-            resident_library_names.append(s)
-
-        table_size = self.read_uint32(f)
-        first_hunk_slot = self.read_uint32(f)
-        last_hunk_slot = self.read_uint32(f)
-
-        num_hunk_sizes = last_hunk_slot - first_hunk_slot + 1
-        hunk_sizes = []
-        for i in range(num_hunk_sizes):
-            hunk_sizes.append(self.read_uint32(f))
-        return hunk_sizes
-
-    def read_hunk_code(self, f):
-        num_longwords = self.read_uint32(f)
-        return f.read(num_longwords * 4)
-
-    def create_segments(self):
-        hunk_sizes = self.read_hunk_header(self.data)
-        for hunk_sz in hunk_sizes:
-            print(hunk_sz)
-    """
 AmigaHunk.register()
