@@ -325,6 +325,7 @@ class A500(M68000):
 
 
     def decode_instruction(self, data, addr):
+        COPPER_WAIT = 0xFFFE
         error_value = ('unimplemented', len(data), None, None, None, None)
         if len(data) < 2:
             return error_value
@@ -333,7 +334,7 @@ class A500(M68000):
 
         msb = instruction >> 8
         opcode = msb >> 4
-        if instruction == 0xFFFE or instruction == 0xFE4E:
+        if instruction == COPPER_WAIT or instruction == 0xFE4E:
             print("0x%X: opcode:0x%X" %(instruction, opcode))
 
         #print("0x%X 0x%X" % ( addr, instruction))
