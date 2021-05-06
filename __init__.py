@@ -34,30 +34,31 @@ from binaryninja.types import Symbol
 
 from m68k import M68000
 # known hunk type constants
-HUNK_UNIT           = 0x03E7
-HUNK_NAME 	        = 0x03E8
-HUNK_CODE 	        = 0x03E9
-HUNK_DATA 	        = 0x03EA
-HUNK_BSS 	        = 0x03EB
-HUNK_RELOC32 	    = 0x03EC
-HUNK_RELOC16 	    = 0x03ED
-HUNK_RELOC8 	    = 0x03EE
-HUNK_EXT 	        = 0x03EF
-HUNK_SYMBOL 	    = 0x03F0
-HUNK_DEBUG 	        = 0x03F1
-HUNK_END 	        = 0x03F2
-HUNK_HEADER 	    = 0x03F3
-HUNK_OVERLAY 	    = 0x03F5
-HUNK_BREAK 	        = 0x03F6
-HUNK_DREL32 	    = 0x03F7
-HUNK_DREL16 	    = 0x03F8
-HUNK_DREL8 	        = 0x03F9
-HUNK_LIB 	        = 0x03FA
-HUNK_INDEX 	        = 0x03FB
-HUNK_RELOC32SHORT 	= 0x03FC
-HUNK_RELRELOC32 	= 0x03FD
-HUNK_ABSRELOC16 	= 0x03FE
-
+hunk_types = {
+    "HUNK_UNIT": 0x03E7,
+    "HUNK_NAME": 0x03E8,
+    "HUNK_CODE": 0x03E9,
+    "HUNK_DATA": 0x03EA,
+    "HUNK_BSS": 0x03EB,
+    "HUNK_RELOC32": 0x03EC,
+    "HUNK_RELOC16": 0x03ED,
+    "HUNK_RELOC8": 0x03EE,
+    "HUNK_EXT": 0x03EF,
+    "HUNK_SYMBOL": 0x03F0,
+    "HUNK_DEBUG": 0x03F1,
+    "HUNK_END": 0x03F2,
+    "HUNK_HEADER": 0x03F3,
+    "HUNK_OVERLAY": 0x03F5,
+    "HUNK_BREAK": 0x03F6,
+    "HUNK_DREL32": 0x03F7,
+    "HUNK_DREL16": 0x03F8,
+    "HUNK_DREL8": 0x03F9,
+    "HUNK_LIB": 0x03FA,
+    "HUNK_INDEX": 0x03FB,
+    "HUNK_RELOC32SHORT": 0x03FC,
+    "HUNK_RELRELOC32": 0x03FD,
+    "HUNK_ABSRELOC16": 0x03FE
+}
 # http://coppershade.org/articles/Code/Reference/Custom_Chip_Register_List/
 special_registers = {
     0xdff000: "BLTDDAT", #	Blitter destination early read (unusable)
@@ -337,7 +338,6 @@ class A500(M68000):
         if instruction == COPPER_WAIT or instruction == 0xFE4E:
             print("0x%X: opcode:0x%X" %(instruction, opcode))
 
-        #print("0x%X 0x%X" % ( addr, instruction))
         return super().decode_instruction(data, addr)
         """
         copperlist:
@@ -363,8 +363,10 @@ class AmigaHunk(BinaryView):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
         self.platform = Architecture['A500'].standalone_platform
         self.data = data
-        self.create_segments()
-        self.add_special_registers()
+        self.base_addr = 0x040000
+        if self.is_valid_for_data(self.data):
+            self.create_segments()
+            self.add_special_registers()
 
     def add_special_registers(self):
         _type = self.parse_type_string("uint32_t")[0]
@@ -385,36 +387,38 @@ class AmigaHunk(BinaryView):
         for i in range(0, numhunks):
             hunktypes.append(struct.unpack(">L",self.data.read(idx,4))[0])
             idx += 4
-            print("type of %d hunk = 0x%X"% (i, hunktypes[i]))
-            if hunktypes[i] == HUNK_CODE:
+            if hunktypes[i] == hunk_types['HUNK_CODE']:
                 print("code hunk found! 0x%X" % idx)
                 num_words = struct.unpack(">L",self.data.read(idx,4))[0]
                 idx += 4
                 code_sz = num_words * 4
                 print("Length of code: %d" %code_sz )
                 # TODO: fix/identify base address
-                self.add_auto_segment( 0x040000, code_sz, idx, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
-                self.add_user_section("CodeHunk_"+str(i), 0x040000, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
-            elif hunktypes[i] == HUNK_DATA:
+                self.add_auto_segment( self.base_addr, code_sz, idx, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
+                self.add_user_section("CodeHunk_"+str(i), self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
+                # print("candidate for base addr: 0x%X" % (self.base_addr + code_sz)) # needs aligning
+            elif hunktypes[i] == hunk_types['HUNK_DATA']:
                 print("data hunk found! 0x%X" % idx)
                 num_words = struct.unpack(">L",self.data.read(idx,4))[0]
                 idx += 4
                 data_sz = num_words * 4
                 print("Length of data: %d" %data_sz )
                 # segment? base addr?
-                self.add_user_section("DataHunk_"+str(i), 0x040000, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
-
+                self.add_user_section("DataHunk_"+str(i), self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
+            else:
+                if hunktypes[i] in hunk_types:
+                    print(hunk_types[hunktypes[i]])
     @classmethod
     def is_valid_for_data(self, data):
-        header = data.read(0,8)
-        strings = struct.unpack(">L",header[4:8])[0]
-        # strings should be 0 for loadable files
-        if strings != 0x00:
-            return False
+        header = data.read(0,2)
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
 
     def perform_is_executable(self):
-        return True
+        header = self.data.read(0,8)
+        strings = struct.unpack(">L",header[4:8])[0]
+        if strings != 0x00:
+            return False
+        return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
 
 AmigaHunk.register()
 A500.register()
