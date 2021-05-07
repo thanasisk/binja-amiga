@@ -469,7 +469,7 @@ def disassemble_wait(instr):
 	else 
 		qstrncat(str, ", ignore horizontal.", strLen);
 	"""
-    return ("VP 0x%02x, VE 0x%02x; HP 0x%02x, HE 0x%02x; BFD %d"% ( vp, ve, hp, he, bfd))
+    return (" VP 0x%02x, VE 0x%02x; HP 0x%02x, HE 0x%02x; BFD %d"% ( vp, ve, hp, he, bfd))
 
 
 def decode_copper_instruction(value):
