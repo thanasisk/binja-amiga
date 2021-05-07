@@ -31,8 +31,8 @@ from binaryninja.binaryview import BinaryView
 from binaryninja.plugin import PluginCommand
 from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
-
-from m68k import M68000
+from binaryninja.function import InstructionInfo
+from m68k import M68000, OpAbsolute, OpImmediate
 # known hunk type constants
 hunk_types = {
     "HUNK_UNIT": 0x03E7,
@@ -285,48 +285,66 @@ special_registers = {
     0xdff1ba:"COLOR29",     #	Palette color 29
     0xdff1bc:	"COLOR30",	#Palette color 30
     0xdff1be:	"COLOR31",	#Palette color 31
-    # 0xdff1c0	HTOTAL	AGA: Highest number count in horiz line (VARBEAMEN = 1)
-    # 0xdff1c2	HSSTOP	AGA: Horiz line pos for HSYNC stop
-    # 0xdff1c4	HBSTRT	AGA: Horiz line pos for HBLANK start
-    # 0xdff1c6	HBSTOP	AGA: Horiz line pos for HBLANK stop
-    # 0xdff1c8	VTOTAL	AGA: Highest numbered vertical line (VARBEAMEN = 1)
-    # 0xdff1ca	VSSTOP	AGA: Vert line for Vsync stop
-    # 0xdff1cc	VBSTRT	AGA: Vert line for VBLANK start
-    # 0xdff1ce	VBSTOP	AGA: Vert line for VBLANK stop
-    # 0xdff1d0	SPRHSTRT	AGA: UHRES sprite vertical start
-    # 0xdff1d2	SPRHSTOP	AGA: UHRES sprite vertical stop
-    # 0xdff1d4	BPLHSTRT	AGA: UHRES bit plane vertical start
-    # 0xdff1d6	BPLHSTOP	AGA: UHRES bit plane vertical stop
-    # 0xdff1d8	HHPOSW	AGA: DUAL mode hires H beam counter write
-    # 0xdff1da	HHPOSR	AGA: DUAL mode hires H beam counter read
+    0xdff1c0:	"HTOTAL",#	AGA: Highest number count in horiz line (VARBEAMEN = 1)
+    0xdff1c2:	"HSSTOP",#	AGA: Horiz line pos for HSYNC stop
+    0xdff1c4:	"HBSTRT",#	AGA: Horiz line pos for HBLANK start
+    0xdff1c6:	"HBSTOP",#	AGA: Horiz line pos for HBLANK stop
+    0xdff1c8:	"VTOTAL",#	AGA: Highest numbered vertical line (VARBEAMEN = 1)
+    0xdff1ca:	"VSSTOP",#	AGA: Vert line for Vsync stop
+    0xdff1cc:	"VBSTRT",#	AGA: Vert line for VBLANK start
+    0xdff1ce:	"VBSTOP",#	AGA: Vert line for VBLANK stop
+    0xdff1d0:	"SPRHSTRT",#	AGA: UHRES sprite vertical start
+    0xdff1d2:	"SPRHSTOP",#	AGA: UHRES sprite vertical stop
+    0xdff1d4:	"BPLHSTRT",#	AGA: UHRES bit plane vertical start
+    0xdff1d6:	"BPLHSTOP",#	AGA: UHRES bit plane vertical stop
+    0xdff1d8:	"HHPOSW",#	AGA: DUAL mode hires H beam counter write
+    0xdff1da:	"HHPOSR",#	AGA: DUAL mode hires H beam counter read
     0xdff1dc:	"BEAMCON0", #	Beam counter control register
     0xdff1de:	"HSSTRT", #	AGA: Horizontal sync start (VARHSY)
     0xdff1e0:	"VSSTRT", #	AGA: Vertical sync start (VARVSY)
     0xdff1e2:	"HCENTER", #	AGA: Horizontal pos for vsync on interlace
-    # 0xdff1e4:	DIWHIGH	AGA: Display window upper bits for start/stop
-    # 0xdff1e6:	BPLHMOD	AGA: UHRES bit plane modulo
-    # 0xdff1e8:	SPRHPTH	AGA: UHRES sprite pointer (high 5 bits)
-    # 0xdff1ea:	SPRHPTL	AGA: UHRES sprite pointer (low 15 bits)
-    # 0xdff1ec:	BPLHPTH	AGA: VRam (UHRES) bitplane pointer (high 5 bits)
-    # 0xdff1ee:	BPLHPTL	AGA: VRam (UHRES) bitplane pointer (low 15 bits)
+    0xdff1e4:	"DIWHIGH",#	AGA: Display window upper bits for start/stop
+    0xdff1e6:	"BPLHMOD",#	AGA: UHRES bit plane modulo
+    0xdff1e8:	"SPRHPTH",#	AGA: UHRES sprite pointer (high 5 bits)
+    0xdff1ea:	"SPRHPTL",#	AGA: UHRES sprite pointer (low 15 bits)
+    0xdff1ec:	"BPLHPTH",#	AGA: VRam (UHRES) bitplane pointer (high 5 bits)
+    0xdff1ee:	"BPLHPTL",#	AGA: VRam (UHRES) bitplane pointer (low 15 bits)
     0xdff1f0:	"RESERVED",
     0xdff1f2:	"RESERVED",
     0xdff1f4:	"RESERVED",
     0xdff1f6:	"RESERVED",
     0xdff1f8:	"RESERVED",
     0xdff1fa:	"RESERVED",
-    # 0xdff1fc:	FMODE	AGA: Write Fetch mode (0=OCS compatible)
+    0xdff1fc:	"FMODE",# 	AGA: Write Fetch mode (0=OCS compatible)
     0xdff1fe:	"NO-OP" #	No operation/NULL (Copper NOP instruction)
 }
 
 class A500(M68000):
     name = "A500"
+    # Sizes
+    SIZE_BYTE = 0
+    SIZE_WORD = 1
+    SIZE_LONG = 2
     def __init__(self):
         super().__init__()
 
+    def perform_get_instruction_info(self, data, addr):
+        instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
+        if instr == 'unimplemented':
+            return None
+
+        result = InstructionInfo()
+        result.length = length
+        if instr in ('cwait'):
+            conditional = False
+            branch_dest = None
+            return result
+        else:
+            return super().perform_get_instruction_info(data, addr)
+
 
     def decode_instruction(self, data, addr):
-        COPPER_WAIT = 0xFFFE
+        CWAIT = 0xFFFE
         error_value = ('unimplemented', len(data), None, None, None, None)
         if len(data) < 2:
             return error_value
@@ -335,9 +353,22 @@ class A500(M68000):
 
         msb = instruction >> 8
         opcode = msb >> 4
-        if instruction == COPPER_WAIT or instruction == 0xFE4E:
-            print("0x%X: opcode:0x%X" %(instruction, opcode))
-
+        instr = None
+        length = None
+        size = None
+        source = None
+        dest = None
+        third = None
+        if opcode == 0xF:
+            if instruction == CWAIT:
+                instr = 'cwait'
+                length = 2
+                size = 2
+                print(str(len(data)//8)+hex(instruction)+str(data))
+                if len(data) > 0x04:
+                    source = OpImmediate(0, struct.unpack_from('>B', data, 3)[0])
+                    dest = OpImmediate(0, struct.unpack_from('>B', data, 4)[0])
+                return instr, length, size, source, dest, third
         return super().decode_instruction(data, addr)
         """
         copperlist:
