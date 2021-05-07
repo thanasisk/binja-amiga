@@ -368,7 +368,6 @@ class A500(M68000):
             print("%.8X %.8X %.2X" % (instruction, instr_type, addr))
         return super().decode_instruction(data, addr)
 
-
 class AmigaHunk(BinaryView):
     name = 'A500Hunk'
     long_name = 'Amiga 500 Hunk format'
@@ -433,5 +432,60 @@ class AmigaHunk(BinaryView):
             return False
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
 
+def decode_copper_list(view, addr = None):
+    if addr is None:
+        addr = 0x00
+    value = 0
+    while(value != 0xfffffffe):
+        value = struct.unpack(">L",view.read(addr, 4))[0]
+        view.set_comment_at(addr,decode_copper_instruction(value))
+        addr += 4
+
+def disassemble_wait(instr):
+    vp = (instr & 0xff000000) >> 24
+    hp = (instr & 0x00fe0000) >> 16
+    ve = (instr & 0x00007f00) >> 8
+    he = (instr & 0x000000fe)
+    bfd = (instr & 0x00008000) >> 15
+
+    # bit15 can never be masked out
+    v_mask = vp & (ve | 0x80)
+    h_mask = hp & he
+    """
+    if (v_mask > 0): 
+		qstrncat(str, " vpos ", strLen);
+		if (ve != 0x7f) 
+			//console_out_f ("& 0x%02x ", ve);
+			qsnprintf(tmpStr, 31, "& 0x%02x ", ve);
+		qsnprintf(tmpStr, 31, ">= 0x%02x", v_mask);
+
+    if (he > 0) 
+		if (v_mask > 0) 
+			qstrncat(str, " and", strLen);
+		qstrncat(str, " hpos ", strLen);
+		if (he != 0xfe) 
+			qsnprintf(tmpStr, 31, "& 0x%02x ", he);
+		qsnprintf(tmpStr, 31, ">= 0x%02x", h_mask);
+	else 
+		qstrncat(str, ", ignore horizontal.", strLen);
+	"""
+    return (" VP 0x%02x, VE 0x%02x; HP 0x%02x, HE 0x%02x; BFD %d"% ( vp, ve, hp, he, bfd))
+
+
+def decode_copper_instruction(value):
+    instr_type = value & 0x00010001
+    print("0x%.8X 0x%.8X" % ( value, instr_type), end = ' ')
+    if instr_type == 0x00010000:
+        comment = "CWAIT"
+        comment += disassemble_wait(value)
+    elif instr_type == 0x00010001:
+        comment = "CSKIP"
+        comment += disassemble_wait(value)
+    elif instr_type == 0x00000000 or instr_type == 0x00000001:
+         comment = "CMOVE"
+    else:
+        comment = "Unknown Copper Instruction"
+    return comment
+PluginCommand.register_for_address("Decode Copperlist", "Decode CopperList", decode_copper_list)
 AmigaHunk.register()
 A500.register()

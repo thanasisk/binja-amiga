@@ -9,7 +9,7 @@ There are some sample binaries included in this repo. `hello-debug` has debug sy
 ## Cool bits
 Supports A500/OCS special registers - they are automatically added as symbols.
 ## Limitations/Known bugs
-- Currently Copper support is WiP
+- Currently Copper support is WiP, it is only interactive
 - Not extensively tested, consider this alpha for now
 - Base address is currently hardcoded
 - Libraries support is currrently not implemented
