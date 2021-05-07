@@ -13,3 +13,7 @@ Supports A500/OCS special registers - they are automatically added as symbols.
 - Libraries support is currrently not implemented
 ## Licence
 MIT
+## Thanks
+- The Binary Ninja slack crew for their magnificent support
+- crabfists from English Amiga Board for inspiration
+- The Amiga engineering team for creating a computer worth examining decades after its release

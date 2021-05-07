@@ -32,7 +32,9 @@ from binaryninja.plugin import PluginCommand
 from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
 from binaryninja.function import InstructionInfo
-from m68k import M68000, OpAbsolute, OpImmediate
+from m68k import M68000
+
+
 # known hunk type constants
 hunk_types = {
     "HUNK_UNIT": 0x03E7,
@@ -345,8 +347,9 @@ class A500(M68000):
 
     def decode_instruction(self, data, addr):
         CWAIT = 0xFFFE
+        CEND =  0xFFFFFFFE
         error_value = ('unimplemented', len(data), None, None, None, None)
-        if len(data) < 2:
+        if len(data) < 2: # was 2 below was >H
             return error_value
 
         instruction = struct.unpack_from('>H', data)[0]
@@ -360,32 +363,11 @@ class A500(M68000):
         dest = None
         third = None
         if opcode == 0xF:
-            if instruction == CWAIT:
-                instr = 'cwait'
-                length = 2
-                size = 2
-                print(str(len(data)//8)+hex(instruction)+str(data))
-                if len(data) > 0x04:
-                    source = OpImmediate(0, struct.unpack_from('>B', data, 3)[0])
-                    dest = OpImmediate(0, struct.unpack_from('>B', data, 4)[0])
-                return instr, length, size, source, dest, third
+            # to be expanded of course
+            instr_type = instruction & 0x00010001
+            print("%.8X %.8X %.2X" % (instruction, instr_type, addr))
         return super().decode_instruction(data, addr)
-        """
-        copperlist:
-        dc.w	$9001, $FFFE  ; wait for line 144
-        dc.w	$0180, $0F00  ; move red color to 0xdFF180
-        dc.w	$A001, $FFFE  ; wait for line 160
-        dc.w	$0180, $0FFF  ; move white color to 0xdFF180
-        dc.w	$A401, $FFFE  ; wait for line 164
-        dc.w	$0180, $000F  ; move blue color to 0xdFF180
-        dc.w	$AA01, $FFFE  ; wait for line 170
-        dc.w	$0180, $0FFF  ; move white color to 0xdFF180
-        dc.w	$AE01, $FFFE  ; wait for line 174 
-        dc.w	$0180, $0F00  ; move red color to 0xdFF180
-        dc.w	$BE01, $FFFE  ; wait for line 190
-        dc.w	$0180, $0000  ; move black color to 0xdFF180
-        dc.w	$FFFF, $FFFE  ; end of copper list
-        """
+
 
 class AmigaHunk(BinaryView):
     name = 'A500Hunk'
