@@ -438,7 +438,7 @@ def decode_copper_list(view, addr = None):
     value = 0
     while(value != 0xfffffffe):
         value = struct.unpack(">L",view.read(addr, 4))[0]
-        decode_copper_instruction(value)
+        view.set_comment_at(addr,decode_copper_instruction(value))
         addr += 4
 
 def disassemble_wait(instr):
@@ -469,23 +469,23 @@ def disassemble_wait(instr):
 	else 
 		qstrncat(str, ", ignore horizontal.", strLen);
 	"""
-    print("VP 0x%02x, VE 0x%02x; HP 0x%02x, HE 0x%02x; BFD %d"% ( vp, ve, hp, he, bfd))
+    return ("VP 0x%02x, VE 0x%02x; HP 0x%02x, HE 0x%02x; BFD %d"% ( vp, ve, hp, he, bfd))
 
 
 def decode_copper_instruction(value):
     instr_type = value & 0x00010001
     print("0x%.8X 0x%.8X" % ( value, instr_type), end = ' ')
     if instr_type == 0x00010000:
-        print("CWAIT")
-        disassemble_wait(value)
+        comment = "CWAIT"
+        comment += disassemble_wait(value)
     elif instr_type == 0x00010001:
-        print("CSKIP")
-        disassemble_wait(value)
+        comment = "CSKIP"
+        comment += disassemble_wait(value)
     elif instr_type == 0x00000000 or instr_type == 0x00000001:
-         print("CMOVE")
+         comment = "CMOVE"
     else:
-        print("Unknown Copper Instruction")
-
+        comment = "Unknown Copper Instruction"
+    return comment
 PluginCommand.register_for_address("Decode Copperlist", "Decode CopperList", decode_copper_list)
 AmigaHunk.register()
 A500.register()
