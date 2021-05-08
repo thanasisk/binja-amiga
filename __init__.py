@@ -32,7 +32,7 @@ from binaryninja.plugin import PluginCommand
 from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
 from binaryninja.function import InstructionInfo, InstructionTextTokenType, InstructionTextToken
-from m68k import M68000
+from m68k import M68000, OpImmediate
 
 
 # known hunk type constants
@@ -330,6 +330,7 @@ class A500(M68000):
     COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT' ]
     def __init__(self):
         super().__init__()
+        self.is_copperlist = False
 
     def perform_get_instruction_info(self, data, addr):
         instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
@@ -345,13 +346,24 @@ class A500(M68000):
             return super().perform_get_instruction_info(data, addr)
 
     def perform_get_instruction_text(self, data, addr):
-        instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
-        #print("get_instr_text: ", instr)
-        print("addr: 0x.8X" % addr)
+        instr, length, _size, source, dest, third = self.decode_instruction(data, addr)
+        print("perform_get_instruction_text: %s" % instr)
         if instr == 'unimplemented':
             return None
         if instr in [ 'CMOVE', 'CSKIP', 'CWAIT' ]:
-            tokens = [InstructionTextToken(InstructionTextTokenType.TextToken, instr)]
+            #if size is not None:
+            #    instr += SizeSuffix[size]
+            tokens = [InstructionTextToken(InstructionTextTokenType.InstructionToken, "%-10s" % instr)]
+            if source is not None:
+                tokens += source.format(addr)
+            if dest is not None:
+                if source is not None:
+                    tokens += [InstructionTextToken(InstructionTextTokenType.OperandSeparatorToken, ',')]
+                tokens += dest.format(addr)
+            if third is not None:
+                if source is not None or dest is not None:
+                    tokens += [InstructionTextToken(InstructionTextTokenType.OperandSeparatorToken, ',')]
+                tokens += third.format(addr)
             return tokens, length
         else:
             return super().perform_get_instruction_text(data, addr)
@@ -372,26 +384,41 @@ class A500(M68000):
         third = None
         instr, length, size, source, dest, third = super().decode_instruction(data, addr)
         if instr == 'unimplemented':
+            # candidate for Copper instruction
             instruction = struct.unpack_from(">L", data)[0]
             instr_type = instruction & 0x00010001
-            print("0x%.8X 0x%.8X" % ( instruction, instr_type), end = ' ')
             if instr_type == 0x00010000:
                 comment = "CWAIT"
-                print(comment)
                 # instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
                 #comment += disassemble_wait(value)
-                return comment, 2, 0, 0, 0, 0
+                mask = ((1 << 0x10) - 1) << 0x10;
+                _source = instruction & mask
+                src = OpImmediate(2, _source)
+                instr = comment
+                size = 2
+                length = 2
+                source = src
             elif instr_type == 0x00010001:
                 comment = "CSKIP"
-                print(comment)
-                return comment, 2, 0, 0, 0, 0
+                instr = comment
+                size = 2
+                length = 2
+                mask = ((1 << 0x10) - 1) << 0x10;
+                _source = instruction & mask
+                src = OpImmediate(2, _source)
+                source = src
                 #comment += disassemble_wait(value)
             elif instr_type == 0x00000000 or instr_type == 0x00000001:
                 comment = "CMOVE"
-                print(comment)
-                return comment, 2, 0, 0, 0, 0
+                mask = ((1 << 0x10) - 1) << 0x10;
+                _source = instruction & mask
+                src = OpImmediate(2, _source)
+                instr = comment
+                size = 2
+                length = 2
+                source = src
             else:
-                return super().decode_instruction(data, addr)
+                print("NOT RECOGNIZED")
         return instr, length, size, source, dest, third
 
 
