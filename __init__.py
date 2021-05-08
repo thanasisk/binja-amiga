@@ -31,7 +31,7 @@ from binaryninja.binaryview import BinaryView
 from binaryninja.plugin import PluginCommand
 from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
-from binaryninja.function import InstructionInfo
+from binaryninja.function import InstructionInfo, InstructionTextTokenType, InstructionTextToken
 from m68k import M68000
 
 
@@ -327,6 +327,7 @@ class A500(M68000):
     SIZE_BYTE = 0
     SIZE_WORD = 1
     SIZE_LONG = 2
+    COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT' ]
     def __init__(self):
         super().__init__()
 
@@ -334,24 +335,31 @@ class A500(M68000):
         instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
         if instr == 'unimplemented':
             return None
-
         result = InstructionInfo()
         result.length = length
-        if instr in ('cwait'):
+        if instr in [ 'CMOVE', 'CSKIP', 'CWAIT' ]:
             conditional = False
             branch_dest = None
             return result
         else:
             return super().perform_get_instruction_info(data, addr)
 
+    def perform_get_instruction_text(self, data, addr):
+        instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
+        #print("get_instr_text: ", instr)
+        print("addr: 0x.8X" % addr)
+        if instr == 'unimplemented':
+            return None
+        if instr in [ 'CMOVE', 'CSKIP', 'CWAIT' ]:
+            tokens = [InstructionTextToken(InstructionTextTokenType.TextToken, instr)]
+            return tokens, length
+        else:
+            return super().perform_get_instruction_text(data, addr)
 
     def decode_instruction(self, data, addr):
-        CWAIT = 0xFFFE
-        CEND =  0xFFFFFFFE
         error_value = ('unimplemented', len(data), None, None, None, None)
-        if len(data) < 2: # was 2 below was >H
+        if len(data) < 2:
             return error_value
-
         instruction = struct.unpack_from('>H', data)[0]
 
         msb = instruction >> 8
@@ -362,11 +370,30 @@ class A500(M68000):
         source = None
         dest = None
         third = None
-        if opcode == 0xF:
-            # to be expanded of course
+        instr, length, size, source, dest, third = super().decode_instruction(data, addr)
+        if instr == 'unimplemented':
+            instruction = struct.unpack_from(">L", data)[0]
             instr_type = instruction & 0x00010001
-            print("%.8X %.8X %.2X" % (instruction, instr_type, addr))
-        return super().decode_instruction(data, addr)
+            print("0x%.8X 0x%.8X" % ( instruction, instr_type), end = ' ')
+            if instr_type == 0x00010000:
+                comment = "CWAIT"
+                print(comment)
+                # instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
+                #comment += disassemble_wait(value)
+                return comment, 2, 0, 0, 0, 0
+            elif instr_type == 0x00010001:
+                comment = "CSKIP"
+                print(comment)
+                return comment, 2, 0, 0, 0, 0
+                #comment += disassemble_wait(value)
+            elif instr_type == 0x00000000 or instr_type == 0x00000001:
+                comment = "CMOVE"
+                print(comment)
+                return comment, 2, 0, 0, 0, 0
+            else:
+                return super().decode_instruction(data, addr)
+        return instr, length, size, source, dest, third
+
 
 class AmigaHunk(BinaryView):
     name = 'A500Hunk'
@@ -451,24 +478,6 @@ def disassemble_wait(instr):
     # bit15 can never be masked out
     v_mask = vp & (ve | 0x80)
     h_mask = hp & he
-    """
-    if (v_mask > 0): 
-		qstrncat(str, " vpos ", strLen);
-		if (ve != 0x7f) 
-			//console_out_f ("& 0x%02x ", ve);
-			qsnprintf(tmpStr, 31, "& 0x%02x ", ve);
-		qsnprintf(tmpStr, 31, ">= 0x%02x", v_mask);
-
-    if (he > 0) 
-		if (v_mask > 0) 
-			qstrncat(str, " and", strLen);
-		qstrncat(str, " hpos ", strLen);
-		if (he != 0xfe) 
-			qsnprintf(tmpStr, 31, "& 0x%02x ", he);
-		qsnprintf(tmpStr, 31, ">= 0x%02x", h_mask);
-	else 
-		qstrncat(str, ", ignore horizontal.", strLen);
-	"""
     return (" VP 0x%02x, VE 0x%02x; HP 0x%02x, HE 0x%02x; BFD %d"% ( vp, ve, hp, he, bfd))
 
 
