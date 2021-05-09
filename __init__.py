@@ -347,7 +347,7 @@ class A500(M68000):
 
     def perform_get_instruction_text(self, data, addr):
         instr, length, _size, source, dest, third = self.decode_instruction(data, addr)
-        print("perform_get_instruction_text: %s" % instr)
+        #print("perform_get_instruction_text: %s" % instr)
         if instr == 'unimplemented':
             return None
         if instr in [ 'CMOVE', 'CSKIP', 'CWAIT' ]:
@@ -367,7 +367,6 @@ class A500(M68000):
             return tokens, length
         else:
             return super().perform_get_instruction_text(data, addr)
-
     def decode_instruction(self, data, addr):
         error_value = ('unimplemented', len(data), None, None, None, None)
         if len(data) < 2:
@@ -423,16 +422,17 @@ class A500(M68000):
 
 
 class AmigaHunk(BinaryView):
-    name = 'A500Hunk'
+    name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
     def __init__(self, data):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
         self.platform = Architecture['A500'].standalone_platform
         self.data = data
-        self.base_addr = 0x040000
+        self.base_addr = 0x010000
         if self.is_valid_for_data(self.data):
             self.create_segments()
             self.add_special_registers()
+            self.find_copper_lists()
 
     def add_special_registers(self):
         _type = self.parse_type_string("uint32_t")[0]
@@ -459,10 +459,10 @@ class AmigaHunk(BinaryView):
                 idx += 4
                 code_sz = num_words * 4
                 print("Length of code: %d" %code_sz )
-                # TODO: fix/identify base address
                 self.add_auto_segment( self.base_addr, code_sz, idx, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
                 self.add_user_section("CodeHunk_"+str(i), self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
-                # print("candidate for base addr: 0x%X" % (self.base_addr + code_sz)) # needs aligning
+                self.add_function(self.base_addr,Architecture['A500'].standalone_platform)
+                print(self.get_functions_at(self.base_addr))
             elif hunktypes[i] == hunk_types['HUNK_DATA']:
                 print("data hunk found! 0x%X" % idx)
                 num_words = struct.unpack(">L",self.data.read(idx,4))[0]
@@ -474,6 +474,7 @@ class AmigaHunk(BinaryView):
             else:
                 if hunktypes[i] in hunk_types:
                     print(hunk_types[hunktypes[i]])
+
     @classmethod
     def is_valid_for_data(self, data):
         header = data.read(0,2)
@@ -485,6 +486,48 @@ class AmigaHunk(BinaryView):
         if strings != 0x00:
             return False
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
+
+    def is_copper_instruction(self, instruction):
+        instr_type = instruction & 0x00010001
+        # opcode?
+        msb = instruction >> 8
+        opcode = msb >> 4
+        print("%X" % opcode)
+        #if opcode != 0xF:
+        #    return False
+        if instr_type == 0x00010000 or instr_type == 0x00010001 or instr_type == 0x00000000 or instr_type == 0x00000001:
+            return True
+        return False
+
+    def find_copper_lists(self):
+        #foo = self.get_next_basic_block_start_after(self.base_addr)
+        # TODO analyze for any copper lists?
+        eom_offset = self.find_next_data(self.base_addr, b"\xFF\xFF\xFF\xFE")
+        if eom_offset is None:
+            print("No copperlist candidates found!")
+            return
+        end = eom_offset
+        self.set_comment_at(eom_offset,"CopperList end")
+        if eom_offset % 2:
+            print(eom_offset % 2 )
+            eom_offset += 1
+        while(1):
+            candidate = self.read(eom_offset, 4)
+            print(len(candidate),end=' ')
+            print(candidate, end=' ')
+            print("0x%.6X" % eom_offset)
+            if len(candidate) == 4: # just to be on the safe side
+                candidate_instr = struct.unpack(">L",candidate)[0]
+                if not self.is_copper_instruction(candidate_instr):
+                    break
+                else:
+                    print("Copper instruction found: %X" % candidate_instr)
+            # needed to break eventually
+            eom_offset -= 4
+            if eom_offset <self.base_addr:
+                return 
+        print(eom_offset)
+        self.add_function(eom_offset)
 
 def decode_copper_list(view, addr = None):
     if addr is None:
