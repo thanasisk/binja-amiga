@@ -525,9 +525,11 @@ class AmigaHunk(BinaryView):
             # needed to break eventually
             eom_offset -= 4
             if eom_offset <self.base_addr:
-                return 
+                # just for testing
+                eom_offset = 0x01004c
+                return
         print(eom_offset)
-        self.add_function(eom_offset)
+        self.add_function(eom_offset,Architecture['A500'])
 
 def decode_copper_list(view, addr = None):
     if addr is None:
