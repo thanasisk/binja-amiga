@@ -1,5 +1,5 @@
 # binja-amiga
-A binary ninja plugin for Amiga 500 executables
+A binary ninja plugin for Amiga 500 executables - currently WiP
 ## Prerequisites
 A Motorola 68K series Binary Ninja plugin such as https://github.com/wrigjl/binaryninja-m68k
 ## Installation
@@ -10,8 +10,7 @@ There are some sample binaries included in this repo. `hello-debug` has debug sy
 Supports A500/OCS special registers - they are automatically added as symbols.
 ## Limitations/Known bugs
 - Currently Copper support is WiP, it is only interactive
-- Not extensively tested, consider this alpha for now
-- Base address is currently hardcoded
+- Not extensively tested, consider this alpha/WiP for now
 - Libraries support is currrently not implemented
 ## Licence
 MIT

@@ -432,7 +432,7 @@ class AmigaHunk(BinaryView):
         if self.is_valid_for_data(self.data):
             self.create_segments()
             self.add_special_registers()
-            self.find_copper_lists()
+            #self.find_copper_lists()
 
     def add_special_registers(self):
         _type = self.parse_type_string("uint32_t")[0]
@@ -529,7 +529,7 @@ class AmigaHunk(BinaryView):
                 eom_offset = 0x01004c
                 return
         print(eom_offset)
-        self.add_function(eom_offset,Architecture['A500'])
+        self.add_function(eom_offset,Architecture['A500'].standalone_platform)
 
 def decode_copper_list(view, addr = None):
     if addr is None:
