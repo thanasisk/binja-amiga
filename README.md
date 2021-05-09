@@ -18,4 +18,5 @@ MIT
 ## Thanks
 - The Binary Ninja slack crew for their magnificent support
 - crabfists from English Amiga Board for inspiration
+- KaiN and the AmigaDev Discord community
 - The Amiga engineering team for creating a computer worth examining decades after its release
