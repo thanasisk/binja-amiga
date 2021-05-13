@@ -83,9 +83,9 @@ class A500(M68000):
     ## I realized this is so broken ...
     def decode_instruction(self, data, addr):
         error_value = ('unimplemented', len(data), None, None, None, None)
-        if len(data) < 2:
+        if len(data) < 4:
             return error_value
-        instruction = struct.unpack_from('>H', data)[0]
+        instruction = struct.unpack_from('>L', data)[0]
         #msb = instruction >> 8
         #opcode = msb >> 4
         instr = None
@@ -97,28 +97,27 @@ class A500(M68000):
         instr_type = instruction & 0x00010001
         if instr_type == 0x00010000:
             comment = "CWAIT"
-            # instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
             #comment += disassemble_wait(value)
-            mask = ((1 << 0x10) - 1) << 0x10;
+            mask = ((1 << 0x10) - 1) << 0x10
             _source = instruction & mask
-            src = OpImmediate(2, _source)
+            src = OpImmediate(4, _source)
             instr = comment
-            size = 2
-            length = 2
+            size = 4
+            length = 4
             source = src
         elif instr_type == 0x00010001:
             comment = "CSKIP"
             instr = comment
             size = 2
             length = 2
-            mask = ((1 << 0x10) - 1) << 0x10;
+            mask = ((1 << 0x10) - 1) << 0x10
             _source = instruction & mask
             src = OpImmediate(2, _source)
             source = src
             #comment += disassemble_wait(value)
         elif instr_type == 0x00000000 or instr_type == 0x00000001:
             comment = "CMOVE"
-            mask = ((1 << 0x10) - 1) << 0x10;
+            mask = ((1 << 0x10) - 1) << 0x10
             _source = instruction & mask
             src = OpImmediate(2, _source)
             instr = comment

@@ -32,6 +32,23 @@ from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
 
 
+# Address, Calculated Length, Comment
+RAM_SEGMENTS = [
+0x000000, 0x03FFFF, "1st 256K for A500/A2000",
+0x040000, 0x07FFFF - 0x040000, "2nd 256K for A500/A2000",
+0x080000, 0x0FFFFF - 0x080000, "512K  Extended chip RAM",
+0x100000, 0x1FFFFF - 0x100000, "Reserved. Do not use.",
+0x200000, 0x9FFFFF - 0x200000, "Primary  8 MB Auto-config space",
+0xA00000, 0xBEFFFF - 0xA00000, "Reserved. Do not use",
+0xBFD000, 0xBFDF00 - 0xBFD000, "8520-B  (access at even-byte addresses only)",
+0xBFE001, 0xBFEF01 - 0xBFE001, "8520-A (access at odd-byte addresses only)",
+0xC00000, 0xDFEFFF - 0xC00000, "Reserved.  Do not use.",
+0xE00000, 0xE7FFFF - 0xE00000, "Reserved.  Do not use.",
+0xE80000, 0xE8FFFF - 0xE80000, "Auto-config space .  Boards appear here before the system relocates them to their final address",
+0xE90000, 0xEFFFFF - 0xE90000, "Secondary  auto-config space  (usually 64K I/O boards)",
+0xF00000, 0xFBFFFF - 0xF00000, "Reserved.  Do not use.",
+0xFC0000, 0xFFFFFF - 0xFC0000, "256K System ROM" 
+]
 # known hunk type constants
 hunk_types = {
     "HUNK_UNIT": 0x03E7,
@@ -333,14 +350,14 @@ class AmigaHunk(BinaryView):
     long_name = 'Amiga 500 Hunk format'
 
     def __read_long(self, data, idx=0):
-        long = data.read(idx, B_LONG)
+        long = data[idx : idx + B_LONG]
         if len(long) < B_LONG:
             raise HunkParseError("read_long failed")
         return struct.unpack(">L", long)[0]
 
 
     def __read_word(self, data, idx=0):
-        word = data.read(idx, B_WORD)
+        word = data[idx : idx + B_WORD]
         if len(word) < B_WORD:
             raise HunkParseError("read_word failed")
         return struct.unpack(">H", word)[0]
@@ -353,9 +370,8 @@ class AmigaHunk(BinaryView):
             return self.__read_name_size(data, num_longs)
 
     def __read_name_size(self, data, num_longs):
-        pass
         size = (num_longs & 0xFFFFFF) * B_LONG
-        raw_name = data.read(size)
+        raw_name = data.read(0, size)
         if len(raw_name) < size:
             return -1, None
         endpos = raw_name.find(b"\x00")
@@ -368,8 +384,9 @@ class AmigaHunk(BinaryView):
 
     def __init__(self, data):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
-        self.platform = Architecture['A500'].standalone_platform
+        self.platform = Architecture['M68000'].standalone_platform
         self.data = data
+        self.custom_symbols = []
         self.base_addr = 0x010000
         if self.is_valid_for_data(self.data):
             self.create_segments()
@@ -385,22 +402,21 @@ class AmigaHunk(BinaryView):
     def create_segments(self):
         idx = 0x08
         hunktypes = []
-        #numhunks = struct.unpack(">L",self.data.read(idx,4))[0]
         numhunks = self.__read_long(self.data, idx)
-        idx += 4
+        idx += B_LONG
         first_hunk = self.__read_long(self.data, idx)
-        idx += 4
+        idx += B_LONG
         last_hunk = self.__read_long(self.data, idx)
-        idx += 8 # skip a step
+        idx += 2 * B_LONG # skip a step
         print(len(self.data),numhunks, first_hunk, last_hunk)
         for i in range(0, numhunks):
             hunktypes.append(self.__read_long(self.data,idx))
-            idx += 4
+            idx += B_LONG
             if hunktypes[i] == hunk_types['HUNK_CODE']:
                 print("code hunk found! 0x%X" % idx)
-                num_words = struct.unpack(">L",self.data.read(idx,4))[0]
-                idx += 4
-                code_sz = num_words * 4
+                num_words = self.__read_long(self.data, idx)
+                idx += B_LONG
+                code_sz = num_words * B_LONG
                 print("Length of code: %d" %code_sz )
                 self.add_auto_segment( self.base_addr, code_sz, idx, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
                 self.add_user_section("CodeHunk_"+str(i), self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
@@ -408,21 +424,24 @@ class AmigaHunk(BinaryView):
                 print(self.get_functions_at(self.base_addr))
             elif hunktypes[i] == hunk_types['HUNK_DATA']:
                 print("data hunk found! 0x%X" % idx)
-                num_words = struct.unpack(">L",self.data.read(idx,4))[0]
-                idx += 4
-                data_sz = num_words * 4
+                num_words = self.__read_long(self.data, idx)
+                idx += B_LONG
+                data_sz = num_words * B_LONG
                 print("Length of data: %d" %data_sz )
                 # segment? base addr?
                 self.add_user_section("DataHunk_"+str(i), self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
-            elif hunktypes[i] == hunk_types['HUNK_SYMBOL']:
+            elif hunktypes[i] == hunk_types['HUNK_DEBUG']:
+                debug_sz = self.__read_long(self.data, idx)
+                print("DEBUG")
                 pass
                 """
                 while True:
-                    s, n = self._read_name(f)
+                    s, n = self.__read_name(self.data)
                     if s == 0:
                         break
-                    off = self._read_long(f)
-                    self.symbols.append((n, off))
+                    off = self.__read_long(self.data)
+                    self.custom_symbols.append((n, off))
+                    print(self.custom_symbols)
                 """
             else:
                 print(hunktypes)
@@ -437,12 +456,12 @@ class AmigaHunk(BinaryView):
 
     def perform_is_executable(self):
         header = self.data.read(0,8)
-        strings = struct.unpack(">L",header[4:8])[0]
+        strings = self.__read_long(header, 4)
         if strings != 0x00:
             return False
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
 
-
+    """
     def find_copper_lists(self):
         #foo = self.get_next_basic_block_start_after(self.base_addr)
         # TODO analyze for any copper lists?
@@ -474,3 +493,4 @@ class AmigaHunk(BinaryView):
                 return
         print(eom_offset)
         self.add_function(eom_offset,Architecture['A500'].standalone_platform)
+        """
