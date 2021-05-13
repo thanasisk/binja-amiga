@@ -332,18 +332,18 @@ class AmigaHunk(BinaryView):
     name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
 
-    def __read_long(self, data):
-        long = data.read(B_LONG)
+    def __read_long(self, data, idx=0):
+        long = data.read(idx, B_LONG)
         if len(long) < B_LONG:
             raise HunkParseError("read_long failed")
-        return struct.unpack(">L", long)
+        return struct.unpack(">L", long)[0]
 
 
-    def __read_word(self, data):
-        word = data.read(B_WORD)
+    def __read_word(self, data, idx=0):
+        word = data.read(idx, B_WORD)
         if len(word) < B_WORD:
-            raise HunkParseError("read_long failed")
-        return struct.unpack(">H", word)
+            raise HunkParseError("read_word failed")
+        return struct.unpack(">H", word)[0]
 
     def __read_name(self, data):
         num_longs = self.__read_long(data)
@@ -360,11 +360,11 @@ class AmigaHunk(BinaryView):
             return -1, None
         endpos = raw_name.find(b"\x00")
         if endpos == -1: # not found
-            return size, raw_data
+            return size, raw_name
         elif endpos == 0:
             return 0, ""
         else:
-            return size, raw_data[:endpos]
+            return size, raw_name[:endpos]
 
     def __init__(self, data):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
@@ -385,15 +385,16 @@ class AmigaHunk(BinaryView):
     def create_segments(self):
         idx = 0x08
         hunktypes = []
-        numhunks = struct.unpack(">L",self.data.read(idx,4))[0]
+        #numhunks = struct.unpack(">L",self.data.read(idx,4))[0]
+        numhunks = self.__read_long(self.data, idx)
         idx += 4
-        first_hunk = struct.unpack(">L",self.data.read(idx,4))[0]
+        first_hunk = self.__read_long(self.data, idx)
         idx += 4
-        last_hunk = struct.unpack(">L",self.data.read(idx,4))[0]
+        last_hunk = self.__read_long(self.data, idx)
         idx += 8 # skip a step
         print(len(self.data),numhunks, first_hunk, last_hunk)
         for i in range(0, numhunks):
-            hunktypes.append(struct.unpack(">L",self.data.read(idx,4))[0])
+            hunktypes.append(self.__read_long(self.data,idx))
             idx += 4
             if hunktypes[i] == hunk_types['HUNK_CODE']:
                 print("code hunk found! 0x%X" % idx)
