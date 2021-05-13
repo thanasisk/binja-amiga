@@ -318,9 +318,54 @@ special_registers = {
     0xdff1fe:	"NO-OP" #	No operation/NULL (Copper NOP instruction)
 }
 
+B_LONG = 4
+B_WORD = 2
+
+class HunkParseError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
+
 class AmigaHunk(BinaryView):
     name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
+
+    def __read_long(self, data):
+        long = data.read(B_LONG)
+        if len(long) < B_LONG:
+            raise HunkParseError("read_long failed")
+        return struct.unpack(">L", long)
+
+
+    def __read_word(self, data):
+        word = data.read(B_WORD)
+        if len(word) < B_WORD:
+            raise HunkParseError("read_long failed")
+        return struct.unpack(">H", word)
+
+    def __read_name(self, data):
+        num_longs = self.__read_long(data)
+        if num_longs == 0:
+            return 0, ""
+        else:
+            return self.__read_name_size(data, num_longs)
+
+    def __read_name_size(self, data, num_longs):
+        pass
+        size = (num_longs & 0xFFFFFF) * B_LONG
+        raw_name = data.read(size)
+        if len(raw_name) < size:
+            return -1, None
+        endpos = raw_name.find(b"\x00")
+        if endpos == -1: # not found
+            return size, raw_data
+        elif endpos == 0:
+            return 0, ""
+        else:
+            return size, raw_data[:endpos]
+
     def __init__(self, data):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
         self.platform = Architecture['A500'].standalone_platform
@@ -368,8 +413,20 @@ class AmigaHunk(BinaryView):
                 print("Length of data: %d" %data_sz )
                 # segment? base addr?
                 self.add_user_section("DataHunk_"+str(i), self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
+            elif hunktypes[i] == hunk_types['HUNK_SYMBOL']:
+                pass
+                """
+                while True:
+                    s, n = self._read_name(f)
+                    if s == 0:
+                        break
+                    off = self._read_long(f)
+                    self.symbols.append((n, off))
+                """
             else:
-                if hunktypes[i] in hunk_types:
+                print(hunktypes)
+                print("Unsupported hunk type: %.4X" % hunktypes[i])
+                if hunktypes[i] in hunk_types.keys():
                     print(hunk_types[hunktypes[i]])
 
     @classmethod
@@ -384,17 +441,6 @@ class AmigaHunk(BinaryView):
             return False
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
 
-    def is_copper_instruction(self, instruction):
-        instr_type = instruction & 0x00010001
-        # opcode?
-        msb = instruction >> 8
-        opcode = msb >> 4
-        print("%X" % opcode)
-        #if opcode != 0xF:
-        #    return False
-        if instr_type == 0x00010000 or instr_type == 0x00010001 or instr_type == 0x00000000 or instr_type == 0x00000001:
-            return True
-        return False
 
     def find_copper_lists(self):
         #foo = self.get_next_basic_block_start_after(self.base_addr)
