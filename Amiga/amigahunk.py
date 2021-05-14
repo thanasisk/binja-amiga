@@ -466,8 +466,17 @@ class AmigaHunk(BinaryView):
                 print("NAME", str(i), str(name_sz))
                 idx += name_sz
             elif hunktypes[i] == hunk_types['HUNK_EXT']:
-                offset = self.find_next_data(idx, "\x00\x00\x00\x00") - self.base_addr
+                #offset = self.find_next_data(idx, "\x00\x00\x00\x00") - idx
+                offset = self.find_next_data(idx, "\x00\x00\x00\x00") - idx
                 print("HUNK_EXT",str(offset))
+                idx += offset
+            elif hunktypes[i] == hunk_types['HUNK_END']:
+                print("HUNK_END", str(idx))
+                idx += 4
+            elif hunktypes[i] == hunk_types['HUNK_SYMBOL']:
+                #offset = self.find_next_data(idx,"\x00\x00\x00\x00") - idx
+                offset = self.find_next_data(idx, "\x00\x00\x00\x00") - idx
+                print("HUNK_SYMBOL", str(offset))
                 idx += offset
             else:
                 #print(hunktypes)
