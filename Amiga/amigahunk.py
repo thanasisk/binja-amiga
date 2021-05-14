@@ -487,45 +487,11 @@ class AmigaHunk(BinaryView):
     @classmethod
     def is_valid_for_data(self, data):
         header = data.read(0,2)
-        return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
+        return header[0:2] in [b"\x00\x00", b"\xf3\x03"]
 
     def perform_is_executable(self):
         header = self.data.read(0,8)
         strings = self.__read_long(header, 4)
         if strings != 0x00:
             return False
-        return header[0:2] in [b"\x00\x00", b"\xf3\x03"];
-
-    """
-    def find_copper_lists(self):
-        #foo = self.get_next_basic_block_start_after(self.base_addr)
-        # TODO analyze for any copper lists?
-        eom_offset = self.find_next_data(self.base_addr, b"\xFF\xFF\xFF\xFE")
-        if eom_offset is None:
-            print("No copperlist candidates found!")
-            return
-        end = eom_offset
-        self.set_comment_at(eom_offset,"CopperList end")
-        if eom_offset % 2:
-            print(eom_offset % 2 )
-            eom_offset += 1
-        while(1):
-            candidate = self.read(eom_offset, 4)
-            print(len(candidate),end=' ')
-            print(candidate, end=' ')
-            print("0x%.6X" % eom_offset)
-            if len(candidate) == 4: # just to be on the safe side
-                candidate_instr = struct.unpack(">L",candidate)[0]
-                if not self.is_copper_instruction(candidate_instr):
-                    break
-                else:
-                    print("Copper instruction found: %X" % candidate_instr)
-            # needed to break eventually
-            eom_offset -= 4
-            if eom_offset <self.base_addr:
-                # just for testing
-                eom_offset = 0x01004c
-                return
-        print(eom_offset)
-        self.add_function(eom_offset,Architecture['A500'].standalone_platform)
-        """
+        return header[0:2] in [b"\x00\x00", b"\xf3\x03"]
