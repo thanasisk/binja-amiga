@@ -34,20 +34,20 @@ from binaryninja.types import Symbol
 
 # Address, Calculated Length, Comment
 RAM_SEGMENTS = [
-0x000000, 0x03FFFF, "1st 256K for A500/A2000",
-0x040000, 0x07FFFF - 0x040000, "2nd 256K for A500/A2000",
-0x080000, 0x0FFFFF - 0x080000, "512K  Extended chip RAM",
-0x100000, 0x1FFFFF - 0x100000, "Reserved. Do not use.",
-0x200000, 0x9FFFFF - 0x200000, "Primary  8 MB Auto-config space",
-0xA00000, 0xBEFFFF - 0xA00000, "Reserved. Do not use",
-0xBFD000, 0xBFDF00 - 0xBFD000, "8520-B  (access at even-byte addresses only)",
-0xBFE001, 0xBFEF01 - 0xBFE001, "8520-A (access at odd-byte addresses only)",
-0xC00000, 0xDFEFFF - 0xC00000, "Reserved.  Do not use.",
-0xE00000, 0xE7FFFF - 0xE00000, "Reserved.  Do not use.",
-0xE80000, 0xE8FFFF - 0xE80000, "Auto-config space .  Boards appear here before the system relocates them to their final address",
-0xE90000, 0xEFFFFF - 0xE90000, "Secondary  auto-config space  (usually 64K I/O boards)",
-0xF00000, 0xFBFFFF - 0xF00000, "Reserved.  Do not use.",
-0xFC0000, 0xFFFFFF - 0xFC0000, "256K System ROM" 
+(0x000000, 0x03FFFF, "1st 256K for A500/A2000"),
+(0x040000, 0x07FFFF - 0x040000, "2nd 256K for A500/A2000"),
+(0x080000, 0x0FFFFF - 0x080000, "512K  Extended chip RAM"),
+(0x100000, 0x1FFFFF - 0x100000, "Reserved. Do not use."),
+(0x200000, 0x9FFFFF - 0x200000, "Primary  8 MB Auto-config space"),
+(0xA00000, 0xBEFFFF - 0xA00000, "Reserved. Do not use"),
+(0xBFD000, 0xBFDF00 - 0xBFD000, "8520-B  (access at even-byte addresses only)"),
+(0xBFE001, 0xBFEF01 - 0xBFE001, "8520-A (access at odd-byte addresses only)"),
+(0xC00000, 0xDFEFFF - 0xC00000, "Reserved.  Do not use."),
+(0xE00000, 0xE7FFFF - 0xE00000, "Reserved.  Do not use."),
+(0xE80000, 0xE8FFFF - 0xE80000, "Auto-config space .  Boards appear here before the system relocates them to their final address"),
+(0xE90000, 0xEFFFFF - 0xE90000, "Secondary  auto-config space  (usually 64K I/O boards)"),
+(0xF00000, 0xFBFFFF - 0xF00000, "Reserved.  Do not use."),
+(0xFC0000, 0xFFFFFF - 0xFC0000, "256K System ROM") 
 ]
 # known hunk type constants
 hunk_types = {
@@ -388,6 +388,10 @@ class AmigaHunk(BinaryView):
         self.data = data
         self.custom_symbols = []
         self.base_addr = 0x010000
+        # add memory mappings
+        for address, length, comment in RAM_SEGMENTS:
+            # self.add_auto_segment(address, length, 0, 0, SegmentFlag.SegmentReadable | SegmentFlag.SegmentWritable | SegmentFlag.SegmentExecutable)
+            self.add_auto_section(comment, address, length)
         if self.is_valid_for_data(self.data):
             self.create_segments()
             self.add_special_registers()
@@ -422,6 +426,7 @@ class AmigaHunk(BinaryView):
                 self.add_user_section("CodeHunk_"+str(i), self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
                 self.add_function(self.base_addr,Architecture['M68000'].standalone_platform)
                 print(self.get_functions_at(self.base_addr))
+                idx += code_sz
             elif hunktypes[i] == hunk_types['HUNK_DATA']:
                 print("data hunk found! 0x%X" % idx)
                 num_words = self.__read_long(self.data, idx)
@@ -430,10 +435,12 @@ class AmigaHunk(BinaryView):
                 print("Length of data: %d" %data_sz )
                 # segment? base addr?
                 self.add_user_section("DataHunk_"+str(i), self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
+                idx += data_sz
             elif hunktypes[i] == hunk_types['HUNK_DEBUG']:
-                debug_sz = self.__read_long(self.data, idx)
-                print("DEBUG")
-                pass
+                debug_sz = self.__read_long(self.data, idx) * B_LONG
+                idx += B_LONG
+                print("DEBUG",str(i),str(debug_sz))
+                idx += debug_sz
                 """
                 while True:
                     s, n = self.__read_name(self.data)
@@ -443,9 +450,28 @@ class AmigaHunk(BinaryView):
                     self.custom_symbols.append((n, off))
                     print(self.custom_symbols)
                 """
+            elif hunktypes[i] == hunk_types['HUNK_UNIT']:
+                unit_sz = self.__read_long(self.data, idx) * B_LONG
+                idx += B_LONG
+                print("UNIT",str(i),str(unit_sz))
+                idx += unit_sz
+            elif hunktypes[i] == hunk_types['HUNK_BSS']:
+                bss_sz = self.__read_long(self.data, idx) * B_LONG
+                idx += B_LONG
+                print("BSS", str(i), str(bss_sz))
+                idx += bss_sz
+            elif hunktypes[i] == hunk_types['HUNK_NAME']:
+                name_sz = self.__read_long(self.data, idx) * B_LONG
+                idx += B_LONG
+                print("NAME", str(i), str(name_sz))
+                idx += name_sz
+            elif hunktypes[i] == hunk_types['HUNK_EXT']:
+                offset = self.find_next_data(idx, "\x00\x00\x00\x00") - self.base_addr
+                print("HUNK_EXT",str(offset))
+                idx += offset
             else:
-                print(hunktypes)
-                print("Unsupported hunk type: %.4X" % hunktypes[i])
+                #print(hunktypes)
+                print("Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], idx))
                 if hunktypes[i] in hunk_types.keys():
                     print(hunk_types[hunktypes[i]])
 
