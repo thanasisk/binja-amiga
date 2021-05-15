@@ -27,11 +27,11 @@ from __future__ import print_function
 import struct
 
 from binaryninja.architecture import Architecture
-from binaryninja.binaryview import BinaryView
+from binaryninja.binaryview import BinaryReader, BinaryView
 from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
 from .constants import RAM_SEGMENTS, special_registers, hunk_types
-
+from .fsm import AmigaHunkFSM
 
 B_LONG = 4
 B_WORD = 2
@@ -46,19 +46,6 @@ class HunkParseError(Exception):
 class AmigaHunk(BinaryView):
     name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
-
-    def __read_long(self, data, idx=0):
-        long = data[idx : idx + B_LONG]
-        if len(long) < B_LONG:
-            raise HunkParseError("read_long failed")
-        return struct.unpack(">L", long)[0]
-
-
-    def __read_word(self, data, idx=0):
-        word = data[idx : idx + B_WORD]
-        if len(word) < B_WORD:
-            raise HunkParseError("read_word failed")
-        return struct.unpack(">H", word)[0]
 
     def __read_name(self, data):
         num_longs = self.__read_long(data)
@@ -86,6 +73,7 @@ class AmigaHunk(BinaryView):
         self.data = data
         self.custom_symbols = []
         self.base_addr = 0x010000
+        self.br = BinaryReader(data)
         # add memory mappings
         for address, length, comment in RAM_SEGMENTS:
             # self.add_auto_segment(address, length, 0, 0, SegmentFlag.SegmentReadable | SegmentFlag.SegmentWritable | SegmentFlag.SegmentExecutable)
@@ -102,41 +90,35 @@ class AmigaHunk(BinaryView):
             self.define_auto_symbol(Symbol(SymbolType.DataSymbol, addr, special_registers[addr]))
 
     def create_segments(self):
-        idx = 0x08
+        self.br.seek(0x08)
         hunktypes = []
-        numhunks = self.__read_long(self.data, idx)
-        idx += B_LONG
-        first_hunk = self.__read_long(self.data, idx)
-        idx += B_LONG
-        last_hunk = self.__read_long(self.data, idx)
-        idx += 2 * B_LONG # skip a step
+        numhunks = self.br.read32be()
+        first_hunk = self.br.read32be()
+        last_hunk = self.br.read32be()
+        self.br.seek_relative(0x04)
         print(len(self.data),numhunks, first_hunk, last_hunk)
         for i in range(0, numhunks):
-            hunktypes.append(self.__read_long(self.data,idx))
-            idx += B_LONG
+            hunktypes.append(self.br.read32be())
             if hunktypes[i] == hunk_types['HUNK_CODE']:
-                print("code hunk found! 0x%X" % idx)
-                num_words = self.__read_long(self.data, idx)
-                idx += B_LONG
+                print("code hunk found! 0x%X" % self.br.offset)
+                num_words = self.br.read32be()
                 code_sz = num_words * B_LONG
                 print("Length of code: %d" %code_sz )
-                self.add_auto_segment( self.base_addr, code_sz, idx, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
+                self.add_auto_segment( self.base_addr, code_sz, self.br.offset, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
                 self.add_user_section("CodeHunk_"+str(i), self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
                 self.add_function(self.base_addr,Architecture['M68000'].standalone_platform)
                 print(self.get_functions_at(self.base_addr))
-                idx += code_sz
+                self.br.seek_relative(code_sz)
             elif hunktypes[i] == hunk_types['HUNK_DATA']:
-                print("data hunk found! 0x%X" % idx)
-                num_words = self.__read_long(self.data, idx)
-                idx += B_LONG
+                print("data hunk found! 0x%X" % self.br.offset)
+                num_words = self.br.read32be()
                 data_sz = num_words * B_LONG
                 print("Length of data: %d" %data_sz )
                 # segment? base addr?
                 self.add_user_section("DataHunk_"+str(i), self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
-                idx += data_sz
+                self.br.seek_relative(data_sz)
             elif hunktypes[i] == hunk_types['HUNK_DEBUG']:
-                debug_sz = self.__read_long(self.data, idx) * B_LONG
-                idx += B_LONG
+                debug_sz = self.br.read32be()
                 print("DEBUG",str(i),str(debug_sz))
                 idx += debug_sz
                 """
@@ -149,36 +131,39 @@ class AmigaHunk(BinaryView):
                     print(self.custom_symbols)
                 """
             elif hunktypes[i] == hunk_types['HUNK_UNIT']:
-                unit_sz = self.__read_long(self.data, idx) * B_LONG
-                idx += B_LONG
+                unit_sz = self.br.read32be() * B_LONG
                 print("UNIT",str(i),str(unit_sz))
-                idx += unit_sz
+                #idx += unit_sz
+                candidate = self.br.read32be()
+                print("%X" % candidate)
             elif hunktypes[i] == hunk_types['HUNK_BSS']:
-                bss_sz = self.__read_long(self.data, idx) * B_LONG
-                idx += B_LONG
+                bss_sz = self.br.read32be() * B_LONG
                 print("BSS", str(i), str(bss_sz))
-                idx += bss_sz
+                self.br.seek_relative(bss_sz)
             elif hunktypes[i] == hunk_types['HUNK_NAME']:
-                name_sz = self.__read_long(self.data, idx) * B_LONG
-                idx += B_LONG
+                name_sz = self.br.read32be() * B_LONG
                 print("NAME", str(i), str(name_sz))
-                idx += name_sz
+                self.br.seek_relative(name_sz)
             elif hunktypes[i] == hunk_types['HUNK_EXT']:
-                #offset = self.find_next_data(idx, "\x00\x00\x00\x00") - idx
-                offset = self.find_next_data(idx, "\x00\x00\x00\x00") - idx
-                print("HUNK_EXT",str(offset))
-                idx += offset
+                idx = self.br.offset
+                offset = self.find_next_data(idx, "\x00\x00\x00\x00")
+                if offset is not None:
+                    offset -= idx
+                    print("HUNK_EXT",str(offset))
+                    self.br.seek_relative(offset)
             elif hunktypes[i] == hunk_types['HUNK_END']:
+                idx = self.br.offset
                 print("HUNK_END", str(idx))
-                idx += 4
+                self.br.seek_relative(0x04)
             elif hunktypes[i] == hunk_types['HUNK_SYMBOL']:
-                #offset = self.find_next_data(idx,"\x00\x00\x00\x00") - idx
-                offset = self.find_next_data(idx, "\x00\x00\x00\x00") - idx
-                print("HUNK_SYMBOL", str(offset))
-                idx += offset
+                idx = self.br.offset
+                offset = self.find_next_data(idx, "\x00\x00\x00\x00") 
+                if offset is not None:
+                    offset -= idx
+                    print("HUNK_SYMBOL", str(offset))
+                    self.br.seek_relative(offset)
             else:
-                #print(hunktypes)
-                print("Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], idx))
+                print("Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], self.br.offset))
                 if hunktypes[i] in hunk_types.keys():
                     print(hunk_types[hunktypes[i]])
 
@@ -189,7 +174,7 @@ class AmigaHunk(BinaryView):
 
     def perform_is_executable(self):
         header = self.data.read(0,8)
-        strings = self.__read_long(header, 4)
+        strings = header[4:8]
         if strings != 0x00:
             return False
         return header[0:2] in [b"\x00\x00", b"\xf3\x03"]
