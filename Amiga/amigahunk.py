@@ -30,8 +30,7 @@ from binaryninja.architecture import Architecture
 from binaryninja.binaryview import BinaryReader, BinaryView
 from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
-from .constants import RAM_SEGMENTS, special_registers, hunk_types
-from .fsm import AmigaHunkFSM
+from .constants import RAM_SEGMENTS, special_registers, hunk_types # TODO: fix capitals
 
 B_LONG = 4
 B_WORD = 2
@@ -169,12 +168,11 @@ class AmigaHunk(BinaryView):
 
     @classmethod
     def is_valid_for_data(self, data):
-        header = data.read(0,2)
-        return header[0:2] in [b"\x00\x00", b"\xf3\x03"]
-
-    def perform_is_executable(self):
-        header = self.data.read(0,8)
+        header = data.read(0,8)
         strings = header[4:8]
-        if strings != 0x00:
+        if strings != b"\x00\x00\x00\x00":
             return False
-        return header[0:2] in [b"\x00\x00", b"\xf3\x03"]
+        return header[0:2] in [b"\x00\x00", b"\xf3\x03"] # TODO include libs as well, consider inheritance
+    
+    def perform_is_executable(self):
+       return True
