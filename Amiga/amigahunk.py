@@ -99,39 +99,13 @@ class AmigaHunk(BinaryView):
         for i in range(0, numhunks):
             hunktypes.append(self.br.read32be())
             if hunktypes[i] == HUNKTYPES['HUNK_CODE']:
-                binaryninja.log_info("λ code hunk found! 0x%X" % self.br.offset)
-                num_words = self.br.read32be()
-                code_sz = num_words * BYTES_LONG
-                binaryninja.log_debug("Length of code: %d" %code_sz )
-                self.add_auto_segment( self.base_addr, code_sz, self.br.offset, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
-                self.add_user_section("CodeHunk_"+str(i), self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
-                self.add_function(self.base_addr,Architecture['M68000'].standalone_platform)
-                self.br.seek_relative(code_sz)
+                self.__parse_hunk_code()
             elif hunktypes[i] == HUNKTYPES['HUNK_DATA']:
-                binaryninja.log_info("λ data hunk found! 0x%X" % self.br.offset)
-                num_words = self.br.read32be()
-                data_sz = num_words * BYTES_LONG
-                binaryninja.log_debug("Length of data: %d" % data_sz)
-                self.add_user_section("DataHunk_"+str(i), self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
-                self.br.seek_relative(data_sz)
+                self.__parse_hunk_data()
             elif hunktypes[i] == HUNKTYPES['HUNK_DEBUG']:
-                debug_sz = self.br.read32be()
-                print("DEBUG",str(i),str(debug_sz))
-                idx += debug_sz
-                """
-                while True:
-                    s, n = self.__read_name(self.data)
-                    if s == 0:
-                        break
-                    off = self.__read_long(self.data)
-                    self.custom_symbols.append((n, off))
-                    print(self.custom_symbols)
-                """
+                self.__parse_hunk_debug()
             elif hunktypes[i] == HUNKTYPES['HUNK_UNIT']:
-                unit_sz = self.br.read32be() * BYTES_LONG
-                binaryninja.log_info("λ UNIT 0x%.8X 0x%X",i,unit_sz)
-                candidate = self.br.read32be()
-                print("%X" % candidate)
+                self.__parse_hunk_unit()
             elif hunktypes[i] == HUNKTYPES['HUNK_BSS']:
                 bss_sz = self.br.read32be() * BYTES_LONG
                 print("BSS", str(i), str(bss_sz))
@@ -141,27 +115,66 @@ class AmigaHunk(BinaryView):
                 print("NAME", str(i), str(name_sz))
                 self.br.seek_relative(name_sz)
             elif hunktypes[i] == HUNKTYPES['HUNK_EXT']:
-                idx = self.br.offset
-                offset = self.find_next_data(idx, "\x00\x00\x00\x00")
-                if offset is not None:
-                    offset -= idx
-                    print("HUNK_EXT",str(offset))
-                    self.br.seek_relative(offset)
+                self.__parse_hunk_external()
             elif hunktypes[i] == HUNKTYPES['HUNK_END']:
                 binaryninja.log_info("HUNK_END: 0x%.8X", self.br.offset)
-                self.br.seek_relative(0x04)
+                self.br.seek_relative(BYTES_LONG)
             elif hunktypes[i] == HUNKTYPES['HUNK_SYMBOL']:
-                idx = self.br.offset
-                offset = self.find_next_data(idx, "\x00\x00\x00\x00") 
-                if offset is not None:
-                    offset -= idx
-                    binaryninja.log_info("HUNK_SYMBOL 0x%.8X" % offset)
-                    self.br.seek_relative(offset)
+                self.__parse_hunk_symbol()
             else:
-                binaryninja.log_warn("λ Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], self.br.offset))
+                binaryninja.log_warn("λ - Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], self.br.offset))
                 if hunktypes[i] in HUNKTYPES.keys():
                     binaryninja.log_debug(HUNKTYPES[hunktypes[i]])
+    
+    ##
+    # parsers for different hunk types  
 
+    def __parse_hunk_external(self):
+        binaryninja.log_info("λ - external hunk found: 0x%.8X" % self.br.offset)
+        idx = self.br.offset
+        offset = self.find_next_data(idx, "\x00\x00\x00\x00")
+        if offset is not None:
+            offset -= idx
+            self.br.seek_relative(offset)
+
+    def __parse_hunk_debug(self):
+        binaryninja.log_info("λ - debug hunk found 0x%.8X" % self.br.offset)
+        debug_sz = self.br.read32be()
+        self.br.seek_relative(debug_sz) 
+      
+    def __parse_hunk_symbol(self):
+            idx = self.br.offset
+            offset = self.find_next_data(idx, "\x00\x00\x00\x00") 
+            if offset is not None:
+                offset -= idx
+                binaryninja.log_info("HUNK_SYMBOL 0x%.8X" % offset)
+                self.br.seek_relative(offset)
+
+    def __parse_hunk_data(self):
+        binaryninja.log_info("λ - data hunk found! 0x%X" % self.br.offset)
+        num_words = self.br.read32be()
+        data_sz = num_words * BYTES_LONG
+        binaryninja.log_debug("Length of data: %d" % data_sz)
+        self.add_user_section("DataHunk: ", self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
+        self.br.seek_relative(data_sz)
+
+    def __parse_hunk_code(self):
+        binaryninja.log_info("λ - code hunk found! 0x%X" % self.br.offset)
+        num_words = self.br.read32be()
+        code_sz = num_words * BYTES_LONG
+        binaryninja.log_debug("Length of code: %d" %code_sz )
+        self.add_auto_segment( self.base_addr, code_sz, self.br.offset, code_sz, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
+        self.add_user_section("CodeHunk:", self.base_addr, code_sz, SectionSemantics.ReadOnlyCodeSectionSemantics)
+        self.add_function(self.base_addr,Architecture['M68000'].standalone_platform)
+        self.br.seek_relative(code_sz)
+
+    def __parse_hunk_unit(self):
+        unit_sz = self.br.read32be() * BYTES_LONG
+        binaryninja.log_info("λ - unit hunk found: 0x%.8X 0x%X" %(self.br.offset,unit_sz))
+        # here be dragons!!!!!
+        #candidate = self.br.read32be()
+        #print("%X" % candidate)
+        self.br.seek_relative(unit_sz)
     @classmethod
     def is_valid_for_data(self, data):
         header = data.read(0,8)
