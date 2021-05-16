@@ -1,3 +1,4 @@
+# coding=utf-8
 # Address, Calculated Length, Comment
 RAM_SEGMENTS = [
 (0x000000, 0x03FFFF, "1st 256K for A500/A2000"),
@@ -17,7 +18,7 @@ RAM_SEGMENTS = [
 ]
 
 # http://coppershade.org/articles/Code/Reference/Custom_Chip_Register_List/
-special_registers = {
+SPECIAL_REGISTERS = {
     0xdff000: "BLTDDAT", #	Blitter destination early read (unusable)
     0xdff002: "DMACONR", #	DMA control (and blitter status) read
     0xdff004: "VPOSR",  #	Read vertical raster position bit 9 (and interlace odd/even frame)
@@ -277,7 +278,7 @@ special_registers = {
 }
 
 # known hunk type constants
-hunk_types = {
+HUNKTYPES = {
     "HUNK_UNIT": 0x03E7,
     "HUNK_NAME": 0x03E8,
     "HUNK_CODE": 0x03E9,
