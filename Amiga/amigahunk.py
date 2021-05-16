@@ -22,8 +22,6 @@ THE SOFTWARE.
 
 """
 
-from __future__ import print_function
-
 import binaryninja
 from binaryninja.architecture import Architecture
 from binaryninja.binaryview import BinaryReader, BinaryView
@@ -31,6 +29,7 @@ from binaryninja.enums import (SectionSemantics, SegmentFlag, SymbolType)
 from binaryninja.types import Symbol
 from .constants import RAM_SEGMENTS, SPECIAL_REGISTERS, HUNKTYPES
 
+# stating the obvious
 BYTES_LONG = 4
 BYTES_WORD = 2
 
@@ -95,7 +94,7 @@ class AmigaHunk(BinaryView):
         first_hunk = self.br.read32be()
         last_hunk = self.br.read32be()
         self.br.seek_relative(0x04)
-        print(len(self.data),numhunks, first_hunk, last_hunk)
+        binaryninja.log_debug("%d %d %d %d" % (len(self.data),numhunks, first_hunk, last_hunk))
         for i in range(0, numhunks):
             hunktypes.append(self.br.read32be())
             if hunktypes[i] == HUNKTYPES['HUNK_CODE']:
@@ -107,18 +106,13 @@ class AmigaHunk(BinaryView):
             elif hunktypes[i] == HUNKTYPES['HUNK_UNIT']:
                 self.__parse_hunk_unit()
             elif hunktypes[i] == HUNKTYPES['HUNK_BSS']:
-                bss_sz = self.br.read32be() * BYTES_LONG
-                print("BSS", str(i), str(bss_sz))
-                self.br.seek_relative(bss_sz)
+                self.__parse_hunk_bss()
             elif hunktypes[i] == HUNKTYPES['HUNK_NAME']:
-                name_sz = self.br.read32be() * BYTES_LONG
-                print("NAME", str(i), str(name_sz))
-                self.br.seek_relative(name_sz)
+                self.__parse_hunk_name()
             elif hunktypes[i] == HUNKTYPES['HUNK_EXT']:
                 self.__parse_hunk_external()
             elif hunktypes[i] == HUNKTYPES['HUNK_END']:
-                binaryninja.log_info("HUNK_END: 0x%.8X", self.br.offset)
-                self.br.seek_relative(BYTES_LONG)
+                self.__parse_hunk_end()
             elif hunktypes[i] == HUNKTYPES['HUNK_SYMBOL']:
                 self.__parse_hunk_symbol()
             else:
@@ -127,7 +121,22 @@ class AmigaHunk(BinaryView):
                     binaryninja.log_debug(HUNKTYPES[hunktypes[i]])
     
     ##
-    # parsers for different hunk types  
+    # parsers for different hunk types 
+    # 
+    def __parse_hunk_bss(self):
+        binaryninja.log_info("λ - bss hunk found: 0x%.8X" % self.br.offset)
+        bss_sz = self.br.read32be() * BYTES_LONG
+        binaryninja.log_debug("BSS size: ", str(bss_sz))
+        self.br.seek_relative(bss_sz) 
+
+    def __parse_hunk_end(self):
+        binaryninja.log_info("HUNK_END: 0x%.8X", self.br.offset)
+        self.br.seek_relative(BYTES_LONG)
+
+    def __parse_hunk_name(self):
+        binaryninja.log_info("λ - name hunk found: 0x%.8X" % self.br.offset)
+        name_sz = self.br.read32be() * BYTES_LONG
+        self.br.seek_relative(name_sz)
 
     def __parse_hunk_external(self):
         binaryninja.log_info("λ - external hunk found: 0x%.8X" % self.br.offset)
