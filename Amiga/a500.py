@@ -40,7 +40,6 @@ class A500(M68000):
     COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT' ]
     def __init__(self):
         super().__init__()
-        self.is_copperlist = False
 
     # BROKEN
     def perform_get_instruction_info(self, data, addr):
@@ -49,7 +48,7 @@ class A500(M68000):
             return None
         result = InstructionInfo()
         result.length = length
-        if instr in [ 'CMOVE', 'CSKIP', 'CWAIT' ]:
+        if instr in COPPER_INSTRUCTIONS:
             conditional = False
             branch_dest = None
             return result
