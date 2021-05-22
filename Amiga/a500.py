@@ -31,15 +31,14 @@ from binaryninja.types import Symbol
 from binaryninja.function import InstructionInfo, InstructionTextTokenType, InstructionTextToken
 from m68k import M68000, OpImmediate
 
+COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT', 'CEND' ]
+CEND = 0xFFFFFFFE
 class A500(M68000):
     name = "A500"
     # Sizes
     SIZE_BYTE = 0
     SIZE_WORD = 1
     SIZE_LONG = 2
-    COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT' ]
-    def __init__(self):
-        super().__init__()
 
     # BROKEN
     def perform_get_instruction_info(self, data, addr):
@@ -61,7 +60,7 @@ class A500(M68000):
         #print("perform_get_instruction_text: %s" % instr)
         if instr == 'unimplemented':
             return None
-        if instr in [ 'CMOVE', 'CSKIP', 'CWAIT' ]:
+        if instr in COPPER_INSTRUCTIONS:
             #if size is not None:
             #    instr += SizeSuffix[size]
             tokens = [InstructionTextToken(InstructionTextTokenType.InstructionToken, "%-10s" % instr)]
@@ -82,24 +81,31 @@ class A500(M68000):
     ## I realized this is so broken ...
     def decode_instruction(self, data, addr):
         error_value = ('unimplemented', len(data), None, None, None, None)
-        if len(data) < 4:
-            return error_value
-        instruction = struct.unpack_from('>L', data)[0]
-        #msb = instruction >> 8
-        #opcode = msb >> 4
         instr = None
         length = None
         size = None
         source = None
         dest = None
         third = None
+        if len(data) < 4:
+            return error_value
+        instruction = struct.unpack_from('>L', data)[0]
+        if instruction == CEND:
+            instr = 'CEND'
+            size = 4
+            length = 4
+            return instr, length, size, source, dest, third
+        #msb = instruction >> 8
+        #opcode = msb >> 4
+
         instr_type = instruction & 0x00010001
         if instr_type == 0x00010000:
             comment = "CWAIT"
             #comment += disassemble_wait(value)
-            mask = ((1 << 0x10) - 1) << 0x10
-            _source = instruction & mask
-            src = OpImmediate(4, _source)
+            #mask = ((1 << 0x10) - 1) << 0x10
+            #_source = instruction & 0xFFFF0000
+            _source = struct.unpack_from(">H", data, 0)[0]
+            src = OpImmediate(2, _source)
             instr = comment
             size = 4
             length = 4
@@ -107,21 +113,23 @@ class A500(M68000):
         elif instr_type == 0x00010001:
             comment = "CSKIP"
             instr = comment
-            size = 2
-            length = 2
-            mask = ((1 << 0x10) - 1) << 0x10
-            _source = instruction & mask
+            size = 4
+            length = 4
+            #mask = ((1 << 0x10) - 1) << 0x10
+            #_source = instruction & 0xFFFF0000
+            _source = struct.unpack_from(">H", data, 0)[0]
             src = OpImmediate(2, _source)
             source = src
             #comment += disassemble_wait(value)
         elif instr_type == 0x00000000 or instr_type == 0x00000001:
             comment = "CMOVE"
-            mask = ((1 << 0x10) - 1) << 0x10
-            _source = instruction & mask
+            #mask = ((1 << 0x10) - 1) << 0x10
+            #_source = instruction & 0xFFFF0000
+            _source = struct.unpack_from(">H", data, 0)[0]
             src = OpImmediate(2, _source)
             instr = comment
-            size = 2
-            length = 2
+            size = 4
+            length = 4
             source = src
         else:
             print("NOT RECOGNIZED")
