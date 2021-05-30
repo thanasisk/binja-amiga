@@ -33,7 +33,8 @@ from m68k import M68000, OpImmediate
 
 COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT', 'CEND' ]
 CEND = 0xFFFFFFFE
-class A500(M68000):
+#class A500(M68000):
+class A500(Architecture):
     name = "A500"
     # Sizes
     SIZE_BYTE = 0
@@ -42,7 +43,7 @@ class A500(M68000):
 
     # BROKEN
     def perform_get_instruction_info(self, data, addr):
-        instr, length, _size, _source, dest, _third = self.decode_instruction(data, addr)
+        instr, length, _size, _source, dest, _third = self.decode_instruction(data)
         if instr == 'unimplemented':
             return None
         result = InstructionInfo()
@@ -53,10 +54,44 @@ class A500(M68000):
             return result
         else:
             return None
+    def perform_get_instruction_low_level_il(self, data, addr, il):
+        instr, length, size, source, dest, third = self.decode_instruction(data)
+        if instr is not None:
+            if source is not None:
+                pre_il = source.get_pre_il(il)
+                if pre_il is not None:
+                    il.append(pre_il)
+            self.generate_instruction_il(il, instr, length, size, source, dest, third)
+            if source is not None:
+                post_il = source.get_post_il(il)
+                if post_il is not None:
+                    il.append(post_il)
+        else:
+            il.append(il.unimplemented())
+        return length
+    
+    def generate_instruction_il(self, il, instr, length, size, source, dest, third):
+        size_bytes = None
+        if size is not None:
+            size_bytes = 1 << size
+        if instr == 'CWAIT':
+            if source is not None:
+                il.append(source.get_source_il(il))
+        elif instr == 'CSKIP':
+            if source is not None:
+                il.append(source.get_source_il(il))
+        elif instr == 'CEND':
+            if source is not None:
+                il.append(source.get_source_il(il))
+        elif instr == 'CMOVE':
+            if source is not None:
+                il.append(source.get_source_il(il))
+        else:
+            il.append(il.uninplemented())
 
     # BROKEN
     def perform_get_instruction_text(self, data, addr):
-        instr, length, _size, source, dest, third = self.decode_instruction(data, addr)
+        instr, length, _size, source, dest, third = self.decode_instruction(data)
         #print("perform_get_instruction_text: %s" % instr)
         if instr == 'unimplemented':
             return None
@@ -76,10 +111,10 @@ class A500(M68000):
                 tokens += third.format(addr)
             return tokens, length
         else:
-            return super().perform_get_instruction_text(data, addr)
+            return None, None
 
-    ## I realized this is so broken ...
-    def decode_instruction(self, data, addr):
+    # Yay, fixed!
+    def decode_instruction(self, data):
         error_value = ('unimplemented', len(data), None, None, None, None)
         instr = None
         length = None
@@ -97,13 +132,10 @@ class A500(M68000):
             return instr, length, size, source, dest, third
         #msb = instruction >> 8
         #opcode = msb >> 4
-
         instr_type = instruction & 0x00010001
         if instr_type == 0x00010000:
             comment = "CWAIT"
             #comment += disassemble_wait(value)
-            #mask = ((1 << 0x10) - 1) << 0x10
-            #_source = instruction & 0xFFFF0000
             _source = struct.unpack_from(">H", data, 0)[0]
             src = OpImmediate(2, _source)
             instr = comment
@@ -123,8 +155,6 @@ class A500(M68000):
             #comment += disassemble_wait(value)
         elif instr_type == 0x00000000 or instr_type == 0x00000001:
             comment = "CMOVE"
-            #mask = ((1 << 0x10) - 1) << 0x10
-            #_source = instruction & 0xFFFF0000
             _source = struct.unpack_from(">H", data, 0)[0]
             src = OpImmediate(2, _source)
             instr = comment

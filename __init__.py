@@ -27,7 +27,7 @@ from __future__ import print_function
 import struct
 
 from binaryninja.plugin import PluginCommand
-from .Amiga.amigahunk import AmigaHunk
+from .Amiga.loadseg import AmigaLoadSeg
 from .Amiga.a500 import A500
 
 
@@ -68,5 +68,5 @@ def decode_copper_instruction(value):
         comment = "Unknown Copper Instruction"
     return comment
 PluginCommand.register_for_address("Decode Copperlist", "Decode CopperList", decode_copper_list)
-AmigaHunk.register()
+AmigaLoadSeg.register()
 A500.register()

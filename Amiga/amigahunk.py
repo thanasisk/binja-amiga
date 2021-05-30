@@ -43,7 +43,7 @@ class HunkParseError(Exception):
 class AmigaHunk(BinaryView):
     name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
-
+    """
     # candidate for removal
     def __read_name(self, data): # TODO: refactor this
         num_longs = self.__read_long(data)
@@ -65,7 +65,7 @@ class AmigaHunk(BinaryView):
             return 0, ""
         else:
             return size, raw_name[:endpos]
-
+    """
     def __init__(self, data):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
         self.platform = Architecture['M68000'].standalone_platform
@@ -73,12 +73,12 @@ class AmigaHunk(BinaryView):
         self.custom_symbols = []
         self.base_addr = 0x010000
         self.br = BinaryReader(data)
+        self.is_library = False
+        self.is_loadseg = False
         # add memory mappings
         for address, length, comment in RAM_SEGMENTS:
             self.add_auto_section(comment, address, length)
-        if self.is_valid_for_data(self.data):
-            self.create_segments()
-            self.add_special_registers()
+        self.add_special_registers()
             #self.find_copper_lists()
 
     def add_special_registers(self):
@@ -88,57 +88,67 @@ class AmigaHunk(BinaryView):
             self.define_auto_symbol(Symbol(SymbolType.DataSymbol, addr, SPECIAL_REGISTERS[addr]))
 
     def create_segments(self):
-        self.br.seek(0x08)
-        hunktypes = []
-        numhunks = self.br.read32be()
-        first_hunk = self.br.read32be()
-        last_hunk = self.br.read32be()
-        self.br.seek_relative(0x04)
-        binaryninja.log_debug("%d %d %d %d" % (len(self.data),numhunks, first_hunk, last_hunk))
-        for i in range(0, numhunks):
-            hunktypes.append(self.br.read32be())
-            if hunktypes[i] == HUNKTYPES['HUNK_CODE']:
-                self.__parse_hunk_code()
-            elif hunktypes[i] == HUNKTYPES['HUNK_DATA']:
-                self.__parse_hunk_data()
-            elif hunktypes[i] == HUNKTYPES['HUNK_DEBUG']:
-                self.__parse_hunk_debug()
-            elif hunktypes[i] == HUNKTYPES['HUNK_UNIT']:
-                self.__parse_hunk_unit()
-            elif hunktypes[i] == HUNKTYPES['HUNK_BSS']:
-                self.__parse_hunk_bss()
-            elif hunktypes[i] == HUNKTYPES['HUNK_NAME']:
-                self.__parse_hunk_name()
-            elif hunktypes[i] == HUNKTYPES['HUNK_EXT']:
-                self.__parse_hunk_external()
-            elif hunktypes[i] == HUNKTYPES['HUNK_END']:
-                self.__parse_hunk_end()
-            elif hunktypes[i] == HUNKTYPES['HUNK_SYMBOL']:
-                self.__parse_hunk_symbol()
-            else:
-                binaryninja.log_warn("λ - Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], self.br.offset))
-                if hunktypes[i] in HUNKTYPES.keys():
-                    binaryninja.log_debug(HUNKTYPES[hunktypes[i]])
-    
+        self.br.seek(0x04)
+        N = self.br.read32be()
+        self.br.seek_relative(N * BYTES_LONG)
+        print(N)
+        print(self.br.offset)
+        numhunks = self.__get_library_hunks()
+        
+    def __get_library_hunks(self):
+        hunktype = self.br.read32be()
+        if hunktype == HUNKTYPES['HUNK_END']:
+            return
+        elif hunktype == HUNKTYPES['HUNK_CODE']:
+            self.__parse_hunk_code()
+        elif hunktype == HUNKTYPES['HUNK_NAME']:
+            self.__parse_hunk_name()
+        else:
+            binaryninja.log_info("unknown hunk type")
+
+    def __read_string(self):
+        num_longs = self.br.read32be()
+        if num_longs < 1:
+            return ""
+        s = self.br.read(num_longs * 4)
+        #idx = s.find("\0")
+        #return s[:idx]
+        return s    
     ##
     # parsers for different hunk types 
     # 
-    def __parse_hunk_bss(self):
+    def parse_hunk_reloc16(self):
+        binaryninja.log_info("λ - reloc16 hunk found: 0x%.8X" % self.br.offset)
+        number_of_offsets = self.br.read16be()
+        if number_of_offsets == 0:
+            return # immediate end of block
+        hunk_no = self.br.read16be()
+        self.br.seek_relative(hunk_no * number_of_offsets)
+
+    def parse_hunk_reloc32(self):
+        binaryninja.log_info("λ - reloc32 hunk found: 0x%.8X" % self.br.offset)
+        number_of_offsets = self.br.read32be()
+        if number_of_offsets == 0:
+            return # immediate end of block
+        hunk_no = self.br.read32be()
+        self.br.seek_relative(hunk_no * number_of_offsets)
+
+    def parse_hunk_bss(self):
         binaryninja.log_info("λ - bss hunk found: 0x%.8X" % self.br.offset)
         bss_sz = self.br.read32be() * BYTES_LONG
-        binaryninja.log_debug("BSS size: ", str(bss_sz))
+        binaryninja.log_debug("BSS size: %d" % bss_sz)
         self.br.seek_relative(bss_sz) 
 
-    def __parse_hunk_end(self):
-        binaryninja.log_info("HUNK_END: 0x%.8X", self.br.offset)
+    def parse_hunk_end(self):
+        binaryninja.log_info("HUNK_END: 0x%.8X" % self.br.offset)
         self.br.seek_relative(BYTES_LONG)
 
-    def __parse_hunk_name(self):
+    def parse_hunk_name(self):
         binaryninja.log_info("λ - name hunk found: 0x%.8X" % self.br.offset)
         name_sz = self.br.read32be() * BYTES_LONG
         self.br.seek_relative(name_sz)
 
-    def __parse_hunk_external(self):
+    def parse_hunk_external(self):
         binaryninja.log_info("λ - external hunk found: 0x%.8X" % self.br.offset)
         idx = self.br.offset
         offset = self.find_next_data(idx, "\x00\x00\x00\x00")
@@ -146,20 +156,27 @@ class AmigaHunk(BinaryView):
             offset -= idx
             self.br.seek_relative(offset)
 
-    def __parse_hunk_debug(self):
+    def parse_hunk_debug(self):
         binaryninja.log_info("λ - debug hunk found 0x%.8X" % self.br.offset)
         debug_sz = self.br.read32be()
         self.br.seek_relative(debug_sz) 
       
-    def __parse_hunk_symbol(self):
+    def parse_hunk_symbol(self):
             idx = self.br.offset
+            while 1:
+                symbol = self.__read_string() 
+                if symbol == "":
+                    break
+                else:
+                    print(symbol)
+            """
             offset = self.find_next_data(idx, "\x00\x00\x00\x00") 
             if offset is not None:
                 offset -= idx
                 binaryninja.log_info("HUNK_SYMBOL 0x%.8X" % offset)
                 self.br.seek_relative(offset)
-
-    def __parse_hunk_data(self):
+            """
+    def parse_hunk_data(self):
         binaryninja.log_info("λ - data hunk found! 0x%X" % self.br.offset)
         num_words = self.br.read32be()
         data_sz = num_words * BYTES_LONG
@@ -167,7 +184,7 @@ class AmigaHunk(BinaryView):
         self.add_user_section("DataHunk: ", self.base_addr, data_sz, SectionSemantics.ReadOnlyDataSectionSemantics)
         self.br.seek_relative(data_sz)
 
-    def __parse_hunk_code(self):
+    def parse_hunk_code(self):
         binaryninja.log_info("λ - code hunk found! 0x%X" % self.br.offset)
         num_words = self.br.read32be()
         code_sz = num_words * BYTES_LONG
@@ -184,19 +201,23 @@ class AmigaHunk(BinaryView):
         #candidate = self.br.read32be()
         #print("%X" % candidate)
         self.br.seek_relative(unit_sz)
+
     @classmethod
     def is_valid_for_data(self, data):
         header = data.read(0,8)
         strings = header[4:8]
-        retVal = (header[0:4] == b"\x00\x00\x03\xf3") # TODO include libs as well, consider inheritance
+        self.is_loadseg = header[0:4] == b"\x00\x00\x03\xf3"
+        self.is_library = header[0:4] == b'\x00\x00\x03\xE7'
+        retVal = (self.is_library or self.is_loadseg)
         if retVal == False:
             binaryninja.log_debug(header[0:4])
             binaryninja.log_error("λ - Unsupported file")
         else:
-            if strings != b"\x00\x00\x00\x00":
+            if strings != b"\x00\x00\x00\x00" and self.is_loadseg == True:
                 binaryninja.log_error("λ - Unsupported LOADSEG file")
                 return False
         return retVal
 
     def perform_is_executable(self):
        return True
+
