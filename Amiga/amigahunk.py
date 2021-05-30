@@ -201,23 +201,3 @@ class AmigaHunk(BinaryView):
         #candidate = self.br.read32be()
         #print("%X" % candidate)
         self.br.seek_relative(unit_sz)
-
-    @classmethod
-    def is_valid_for_data(self, data):
-        header = data.read(0,8)
-        strings = header[4:8]
-        self.is_loadseg = header[0:4] == b"\x00\x00\x03\xf3"
-        self.is_library = header[0:4] == b'\x00\x00\x03\xE7'
-        retVal = (self.is_library or self.is_loadseg)
-        if retVal == False:
-            binaryninja.log_debug(header[0:4])
-            binaryninja.log_error("λ - Unsupported file")
-        else:
-            if strings != b"\x00\x00\x00\x00" and self.is_loadseg == True:
-                binaryninja.log_error("λ - Unsupported LOADSEG file")
-                return False
-        return retVal
-
-    def perform_is_executable(self):
-       return True
-
