@@ -30,7 +30,7 @@ from .constants import HUNKTYPES
 class AmigaLoadSeg(AmigaHunk):
     name = 'AmigaLoadSeg'
     long_name = 'Amiga 500 LoadSeg format'
-    Eloadseg_magic = b"\x00\x00\x03\xf3"
+    loadseg_magic = b"\x00\x00\x03\xf3"
 
     def __init__(self, data):
         super().__init__(data)

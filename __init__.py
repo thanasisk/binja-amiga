@@ -28,6 +28,7 @@ import struct
 
 from binaryninja.plugin import PluginCommand
 from .Amiga.loadseg import AmigaLoadSeg
+from .Amiga.loadlib import AmigaLoadLib
 from .Amiga.a500 import A500
 
 
@@ -69,4 +70,5 @@ def decode_copper_instruction(value):
     return comment
 PluginCommand.register_for_address("Decode Copperlist", "Decode CopperList", decode_copper_list)
 AmigaLoadSeg.register()
+AmigaLoadLib.register()
 A500.register()

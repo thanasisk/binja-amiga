@@ -43,38 +43,16 @@ class HunkParseError(Exception):
 class AmigaHunk(BinaryView):
     name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
-    """
-    # candidate for removal
-    def __read_name(self, data): # TODO: refactor this
-        num_longs = self.__read_long(data)
-        if num_longs == 0:
-            return 0, ""
-        else:
-            return self.__read_name_size(data, num_longs)
 
-    # candidate for removal
-    def __read_name_size(self, data, num_longs): # TODO refactor this
-        size = (num_longs & 0x00FFFFFF) * BYTES_LONG
-        raw_name = data.read(0, size)
-        if len(raw_name) < size:
-            return -1, None
-        endpos = raw_name.find(b"\x00")
-        if endpos == -1: # not found
-            return size, raw_name
-        elif endpos == 0:
-            return 0, ""
-        else:
-            return size, raw_name[:endpos]
-    """
     def __init__(self, data):
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
         self.platform = Architecture['M68000'].standalone_platform
-        self.data = data
-        self.custom_symbols = []
-        self.base_addr = 0x010000
-        self.br = BinaryReader(data)
-        self.is_library = False
-        self.is_loadseg = False
+        self.data :BinaryView = data
+        self.custom_symbols :list = []
+        self.base_addr :int = 0x010000
+        self.br = BinaryReader(self.data)
+        self.is_library :bool = False
+        self.is_loadseg :bool = False
         # add memory mappings
         for address, length, comment in RAM_SEGMENTS:
             self.add_auto_section(comment, address, length)
@@ -86,25 +64,7 @@ class AmigaHunk(BinaryView):
         for addr in SPECIAL_REGISTERS.keys():
             self.define_user_data_var(addr, _type)
             self.define_auto_symbol(Symbol(SymbolType.DataSymbol, addr, SPECIAL_REGISTERS[addr]))
-
-    def create_segments(self):
-        self.br.seek(0x04)
-        N = self.br.read32be()
-        self.br.seek_relative(N * BYTES_LONG)
-        print(N)
-        print(self.br.offset)
-        numhunks = self.__get_library_hunks()
-        
-    def __get_library_hunks(self):
-        hunktype = self.br.read32be()
-        if hunktype == HUNKTYPES['HUNK_END']:
-            return
-        elif hunktype == HUNKTYPES['HUNK_CODE']:
-            self.__parse_hunk_code()
-        elif hunktype == HUNKTYPES['HUNK_NAME']:
-            self.__parse_hunk_name()
-        else:
-            binaryninja.log_info("unknown hunk type")
+     
 
     def __read_string(self):
         num_longs = self.br.read32be()
@@ -194,7 +154,7 @@ class AmigaHunk(BinaryView):
         self.add_function(self.base_addr,Architecture['M68000'].standalone_platform)
         self.br.seek_relative(code_sz)
 
-    def __parse_hunk_unit(self):
+    def parse_hunk_unit(self):
         unit_sz = self.br.read32be() * BYTES_LONG
         binaryninja.log_info("λ - unit hunk found: 0x%.8X 0x%X" %(self.br.offset,unit_sz))
         # here be dragons!!!!!
