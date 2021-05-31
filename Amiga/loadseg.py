@@ -28,58 +28,33 @@ from .constants import HUNKTYPES
 
 
 class AmigaLoadSeg(AmigaHunk):
-    name = 'AmigaLoadSeg'
-    long_name = 'Amiga 500 LoadSeg format'
-    loadseg_magic = b"\x00\x00\x03\xf3"
+    name :str = 'AmigaLoadSeg'
+    long_name :str = 'Amiga 500 LoadSeg format'
+    loadseg_magic :bytes = b"\x00\x00\x03\xf3"
 
-    def __init__(self, data):
+    def __init__(self, data)->None:
         super().__init__(data)
         if self.is_valid_for_data(self.data):
             self.create_segments()
 
-    def create_segments(self):
-        hunktypes = []
-        numhunks = 0
+    def create_segments(self)->None:
+        hunktypes :list = []
+        numhunks :int = 0
         self.br.seek(0x08)
         numhunks = self.br.read32be()
-        first_hunk = self.br.read32be()
-        last_hunk = self.br.read32be()
+        first_hunk :int = self.br.read32be()
+        last_hunk :int = self.br.read32be()
         self.br.seek_relative(0x04)
         binaryninja.log_debug("%d %d %d %d" % (len(self.data),numhunks, first_hunk, last_hunk))
         for i in range(0, numhunks):
             hunktypes.append(self.br.read32be())
-            if hunktypes[i] == HUNKTYPES['HUNK_CODE']:
-                super().parse_hunk_code()
-            elif hunktypes[i] == HUNKTYPES['HUNK_DATA']:
-                self.__parse_hunk_data()
-            elif hunktypes[i] == HUNKTYPES['HUNK_DEBUG']:
-                self.__parse_hunk_debug()
-            elif hunktypes[i] == HUNKTYPES['HUNK_UNIT']:
-                self.__parse_hunk_unit()
-            elif hunktypes[i] == HUNKTYPES['HUNK_BSS']:
-                self.__parse_hunk_bss()
-            elif hunktypes[i] == HUNKTYPES['HUNK_NAME']:
-                self.__parse_hunk_name()
-            elif hunktypes[i] == HUNKTYPES['HUNK_EXT']:
-                self.__parse_hunk_external()
-            elif hunktypes[i] == HUNKTYPES['HUNK_END']:
-                self.__parse_hunk_end()
-            elif hunktypes[i] == HUNKTYPES['HUNK_SYMBOL']:
-                self.__parse_hunk_symbol()
-            elif hunktypes[i] == HUNKTYPES['HUNK_RELOC32']:
-                self.__parse_hunk_reloc32()
-            elif hunktypes[i] == HUNKTYPES['HUNK_RELOC16']:
-                self.__parse_hunk_reloc16()
-            else:
-                binaryninja.log_warn("λ - Unsupported hunk type: %.4X at offset: 0x%.8X" % (hunktypes[i], self.br.offset))
-                if hunktypes[i] in HUNKTYPES.keys():
-                    binaryninja.log_debug(HUNKTYPES[hunktypes[i]])
+            self.parse_hunktype(hunktypes[i])
 
     @classmethod
-    def is_valid_for_data(self, data):
-        header = data.read(0,8)
-        strings = header[4:8]
-        self.is_loadseg = header[0:4] == b"\x00\x00\x03\xf3"
+    def is_valid_for_data(self, data)->bool:
+        header :bytes = data.read(0,8)
+        strings :bytes = header[4:8]
+        self.is_loadseg :bool = header[0:4] == b"\x00\x00\x03\xf3"
         if strings != b"\x00\x00\x00\x00" and self.is_loadseg == True:
             binaryninja.log_error("λ - Unsupported LOADSEG file")
             return False

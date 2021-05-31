@@ -44,7 +44,7 @@ class AmigaHunk(BinaryView):
     name = 'AmigaHunk'
     long_name = 'Amiga 500 Hunk format'
 
-    def __init__(self, data):
+    def __init__(self, data) -> None:
         BinaryView.__init__(self, parent_view=data, file_metadata=data.file)
         self.platform = Architecture['M68000'].standalone_platform
         self.data :BinaryView = data
@@ -59,14 +59,13 @@ class AmigaHunk(BinaryView):
         self.add_special_registers()
             #self.find_copper_lists()
 
-    def add_special_registers(self):
+    def add_special_registers(self) -> None:
         _type = self.parse_type_string("uint32_t")[0]
         for addr in SPECIAL_REGISTERS.keys():
             self.define_user_data_var(addr, _type)
             self.define_auto_symbol(Symbol(SymbolType.DataSymbol, addr, SPECIAL_REGISTERS[addr]))
-     
 
-    def __read_string(self):
+    def __read_string(self) -> str:
         num_longs = self.br.read32be()
         if num_longs < 1:
             return ""
@@ -77,7 +76,7 @@ class AmigaHunk(BinaryView):
     ##
     # parsers for different hunk types 
     # 
-    def parse_hunk_reloc16(self):
+    def parse_hunk_reloc16(self)->None:
         binaryninja.log_info("λ - reloc16 hunk found: 0x%.8X" % self.br.offset)
         number_of_offsets = self.br.read16be()
         if number_of_offsets == 0:
@@ -85,7 +84,7 @@ class AmigaHunk(BinaryView):
         hunk_no = self.br.read16be()
         self.br.seek_relative(hunk_no * number_of_offsets)
 
-    def parse_hunk_reloc32(self):
+    def parse_hunk_reloc32(self)->None:
         binaryninja.log_info("λ - reloc32 hunk found: 0x%.8X" % self.br.offset)
         number_of_offsets = self.br.read32be()
         if number_of_offsets == 0:
@@ -93,25 +92,33 @@ class AmigaHunk(BinaryView):
         hunk_no = self.br.read32be()
         self.br.seek_relative(hunk_no * number_of_offsets)
 
-    def parse_hunk_bss(self):
+    def parse_hunk_bss(self)->None:
         binaryninja.log_info("λ - bss hunk found: 0x%.8X" % self.br.offset)
         bss_sz = self.br.read32be() * BYTES_LONG
         binaryninja.log_debug("BSS size: %d" % bss_sz)
         self.br.seek_relative(bss_sz) 
 
-    def parse_hunk_end(self):
+    def parse_hunk_end(self)->None:
         binaryninja.log_info("HUNK_END: 0x%.8X" % self.br.offset)
         self.br.seek_relative(BYTES_LONG)
 
-    def parse_hunk_name(self):
+    def parse_hunk_name(self)->None:
+        # TODO: expand
         binaryninja.log_info("λ - name hunk found: 0x%.8X" % self.br.offset)
         name_sz = self.br.read32be() * BYTES_LONG
         self.br.seek_relative(name_sz)
 
     def parse_hunk_external(self):
+        # TODO: expand
+        """
+        Each symbol data unit consists of a type byte, 
+        the symbol name length (3 bytes), the symbol name itself, 
+        and further data. You specify the symbol name length in long words, 
+        and pad the name field to the next longword boundary with zeros. 
+        """
         binaryninja.log_info("λ - external hunk found: 0x%.8X" % self.br.offset)
-        idx = self.br.offset
-        offset = self.find_next_data(idx, "\x00\x00\x00\x00")
+        idx :int = self.br.offset
+        offset = self.find_next_data(idx, "\x00\x00")
         if offset is not None:
             offset -= idx
             self.br.seek_relative(offset)
@@ -161,3 +168,27 @@ class AmigaHunk(BinaryView):
         #candidate = self.br.read32be()
         #print("%X" % candidate)
         self.br.seek_relative(unit_sz)
+
+    def parse_hunktype(self, hunktype):
+        if hunktype == HUNKTYPES['HUNK_END']:
+            self.parse_hunk_end()
+        elif hunktype == HUNKTYPES['HUNK_CODE']:
+            self.parse_hunk_code()
+        elif hunktype == HUNKTYPES['HUNK_DATA']:
+            self.parse_hunk_data()
+        elif hunktype == HUNKTYPES['HUNK_NAME']:
+            self.parse_hunk_name()
+        elif hunktype == HUNKTYPES['HUNK_BSS']:
+            self.parse_hunk_bss()
+        elif hunktype == HUNKTYPES['HUNK_RELOC32']:
+            self.parse_hunk_reloc32()
+        elif hunktype == HUNKTYPES['HUNK_RELOC16']:
+            self.parse_hunk_reloc16()
+        elif hunktype == HUNKTYPES['HUNK_SYMBOL']:
+            self.parse_hunk_symbol()
+        elif hunktype == HUNKTYPES['HUNK_DEBUG']:
+            self.parse_hunk_debug()
+        elif hunktype == HUNKTYPES['HUNK_UNIT']:
+            self.parse_hunk_unit()
+        else:
+            binaryninja.log_info("unknown hunk %.4X %.8X" % (hunktype, self.br.offset))
