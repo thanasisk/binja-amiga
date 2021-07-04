@@ -35,7 +35,7 @@ class AmigaLoadLib(AmigaHunk):
         if self.is_valid_for_data(self.data):
             self.create_segments()
 
-    def create_segments(self):
+    def create_segments(self)->None:
         self.br.seek(0x04)
         self.__get_library_hunks()
         
@@ -59,5 +59,5 @@ class AmigaLoadLib(AmigaHunk):
                 self.parse_hunktype(hunktype)
             else:
                 self.br.seek_relative(BYTES_LONG)
-                print("offset: %X: " % self.br.offset)
+                #print("offset: %X: " % self.br.offset)
         return numhunks

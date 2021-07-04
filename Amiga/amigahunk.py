@@ -165,9 +165,11 @@ class AmigaHunk(BinaryView):
         unit_sz = self.br.read32be() * BYTES_LONG
         binaryninja.log_info("λ - unit hunk found: 0x%.8X 0x%X" %(self.br.offset,unit_sz))
         # here be dragons!!!!!
-        #candidate = self.br.read32be()
-        #print("%X" % candidate)
         self.br.seek_relative(unit_sz)
+        candidate = self.br.read32be()
+        if candidate in HUNKTYPES.keys():
+            self.parse_hunktype(candidate)
+
 
     def parse_hunktype(self, hunktype):
         if hunktype == HUNKTYPES['HUNK_END']:

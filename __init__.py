@@ -35,7 +35,7 @@ from .Amiga.a500 import A500
 def decode_copper_list(view, addr = None):
     if addr is None:
         addr = 0x00
-    value = 0
+    value :int = 0
     while(value != 0xfffffffe):
         value = struct.unpack(">L",view.read(addr, 4))[0]
         view.set_comment_at(addr,decode_copper_instruction(value))
