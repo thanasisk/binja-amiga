@@ -27,14 +27,15 @@ from __future__ import print_function
 import struct
 
 from binaryninja.plugin import PluginCommand
-from .Amiga.amigahunk import AmigaHunk
+from .Amiga.loadseg import AmigaLoadSeg
+from .Amiga.loadlib import AmigaLoadLib
 from .Amiga.a500 import A500
 
 
 def decode_copper_list(view, addr = None):
     if addr is None:
         addr = 0x00
-    value = 0
+    value :int = 0
     while(value != 0xfffffffe):
         value = struct.unpack(">L",view.read(addr, 4))[0]
         view.set_comment_at(addr,decode_copper_instruction(value))
@@ -68,5 +69,6 @@ def decode_copper_instruction(value):
         comment = "Unknown Copper Instruction"
     return comment
 PluginCommand.register_for_address("Decode Copperlist", "Decode CopperList", decode_copper_list)
-AmigaHunk.register()
+AmigaLoadSeg.register()
+AmigaLoadLib.register()
 A500.register()
