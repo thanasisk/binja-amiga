@@ -109,7 +109,10 @@ class AmigaHunk(BinaryView):
         # TODO: expand
         binaryninja.log_info("λ - name hunk found: 0x%.8X" % self.br.offset)
         name_sz = self.br.read32be() * BYTES_LONG
-        self.br.seek_relative(name_sz)
+        name :bytes = []
+        name = self.br.read(name_sz)
+        return name.decode("ascii")
+
 
     def parse_hunk_external(self):
         # TODO: expand
@@ -138,20 +141,15 @@ class AmigaHunk(BinaryView):
       
     def parse_hunk_symbol(self):
         binaryninja.log_info("λ - symbol hunk found 0x%X" % self.br.offset)
-        idx = self.br.offset
+        #idx = self.br.offset
         while 1:
             symbol = self.__read_string() 
             if symbol == "":
                 break
             else:
                 print(symbol)
-            """
-            offset = self.find_next_data(idx, "\x00\x00\x00\x00") 
-            if offset is not None:
-                offset -= idx
-                binaryninja.log_info("HUNK_SYMBOL 0x%.8X" % offset)
-                self.br.seek_relative(offset)
-            """
+                print("%.8X" % self.br.read32be())
+
     def parse_hunk_data(self):
         binaryninja.log_info("λ - data hunk found! 0x%X" % self.br.offset)
         num_words = self.br.read32be()
