@@ -70,9 +70,12 @@ class AmigaHunk(BinaryView):
         if num_longs < 1:
             return ""
         s = self.br.read(num_longs * 4)
-        #idx = s.find("\0")
-        #return s[:idx]
-        return s    
+        return s.decode("latin-1")    
+    
+    def __read_name_size(self, num_longs) -> str:
+        size :int = 4 * (num_longs & 0xFFFFFF)
+        data = self.br.read(size)
+        #if len(data)
     ##
     # parsers for different hunk types 
     # 
@@ -106,7 +109,10 @@ class AmigaHunk(BinaryView):
         # TODO: expand
         binaryninja.log_info("λ - name hunk found: 0x%.8X" % self.br.offset)
         name_sz = self.br.read32be() * BYTES_LONG
-        self.br.seek_relative(name_sz)
+        name :bytes = []
+        name = self.br.read(name_sz)
+        return name.decode("ascii")
+
 
     def parse_hunk_external(self):
         # TODO: expand
@@ -118,6 +124,11 @@ class AmigaHunk(BinaryView):
         """
         binaryninja.log_info("λ - external hunk found: 0x%.8X" % self.br.offset)
         idx :int = self.br.offset
+        tp :bytes = self.br.read8()
+        name_length :bytes = self.br.read(3)
+        name = self.br.read(name_length)
+        binaryninja.log_info(name_length)
+        binaryninja.log_info(name)
         offset = self.find_next_data(idx, "\x00\x00")
         if offset is not None:
             offset -= idx
@@ -129,20 +140,16 @@ class AmigaHunk(BinaryView):
         self.br.seek_relative(debug_sz) 
       
     def parse_hunk_symbol(self):
-            idx = self.br.offset
-            while 1:
-                symbol = self.__read_string() 
-                if symbol == "":
-                    break
-                else:
-                    print(symbol)
-            """
-            offset = self.find_next_data(idx, "\x00\x00\x00\x00") 
-            if offset is not None:
-                offset -= idx
-                binaryninja.log_info("HUNK_SYMBOL 0x%.8X" % offset)
-                self.br.seek_relative(offset)
-            """
+        binaryninja.log_info("λ - symbol hunk found 0x%X" % self.br.offset)
+        #idx = self.br.offset
+        while 1:
+            symbol = self.__read_string() 
+            if symbol == "":
+                break
+            else:
+                print(symbol)
+                print("%.8X" % self.br.read32be())
+
     def parse_hunk_data(self):
         binaryninja.log_info("λ - data hunk found! 0x%X" % self.br.offset)
         num_words = self.br.read32be()
@@ -193,4 +200,4 @@ class AmigaHunk(BinaryView):
         elif hunktype == HUNKTYPES['HUNK_UNIT']:
             self.parse_hunk_unit()
         else:
-            binaryninja.log_info("unknown hunk %.4X %.8X" % (hunktype, self.br.offset))
+            binaryninja.log_info("unknown hunk at %.8X" % (self.br.offset))

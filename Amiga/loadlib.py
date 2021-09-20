@@ -49,15 +49,24 @@ class AmigaLoadLib(AmigaHunk):
     def perform_is_executable(self):
        return True
 
+    # this needs fixing ...
     def __get_library_hunks(self)->None:
         numhunks :int = 0
         hunktype :int = 0xDEADBEEF
-        self.br.seek(0)
+        self.br.seek(0x04) # first four bytes are file signature
+        numhunks = self.br.read32be()
+        print(numhunks)
         while self.br.read32be() != None and not self.br.eof:
             if self.data.is_valid_offset(self.br.offset):
                 hunktype = self.br.read32be()
+
+                #if hunktype in HUNKTYPES.values():
                 self.parse_hunktype(hunktype)
+                #else:
+                #    print(hunktype)
+                #    self.br.seek_relative(BYTES_LONG)
             else:
+                print("0x%.4X" % hunktype)
                 self.br.seek_relative(BYTES_LONG)
                 #print("offset: %X: " % self.br.offset)
         return numhunks
