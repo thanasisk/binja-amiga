@@ -29,7 +29,14 @@ import struct
 from binaryninja.architecture import Architecture
 from binaryninja.types import Symbol
 from binaryninja.function import InstructionInfo, InstructionTextTokenType, InstructionTextToken
-from m68k import M68000, OpImmediate
+try:
+    from m68k import M68000, OpImmediate
+except ModuleNotFoundError:
+    import sys
+    import os
+    import binaryninja
+    sys.path.append(os.path.join(binaryninja.user_plugin_path(), "..", "repositories", "community", "plugins"))
+    from wrigjl_binaryninjam68k import M68000, OpImmediate
 
 COPPER_INSTRUCTIONS = [ 'CMOVE', 'CSKIP', 'CWAIT', 'CEND' ]
 CEND = 0xFFFFFFFE
