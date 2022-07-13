@@ -1,7 +1,7 @@
 # binja-amiga
-A binary ninja plugin for Amiga 500 executables
+A binary ninja plugin for Commodore Amiga executables
 ## Prerequisites
-A Motorola 68K series Binary Ninja plugin such as https://github.com/wrigjl/binaryninja-m68k
+A Motorola 68K series Binary Ninja plugin. There are some versions floating around, your best bet as of now is [Galenbwill's version](https://github.com/galenbwill/binaryninja-m68k/)
 
 The canonical way is to install the Motorola 68000 plugin via the plugin manager.
 ## Installation
